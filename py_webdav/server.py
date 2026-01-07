@@ -1,0 +1,417 @@
+"""WebDAV server implementation."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from io import BytesIO
+from typing import BinaryIO, Protocol
+
+from lxml import etree
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import Response as StarletteResponse, StreamingResponse
+from starlette.routing import Route
+
+from .internal import (
+    Depth,
+    GetContentLength,
+    GetContentType,
+    GetETag,
+    GetLastModified,
+    HTTPError,
+    MultiStatus,
+    PropFind,
+    PropertyUpdate,
+    ResourceType,
+    Response,
+)
+from .internal import Backend as InternalBackend
+from .internal import Handler as InternalHandler
+from .internal import elements as elem
+from .internal import is_not_found, serve_multistatus
+from .webdav import (
+    ConditionalMatch,
+    CopyOptions,
+    CreateOptions,
+    FileInfo,
+    MoveOptions,
+    RemoveAllOptions,
+)
+
+
+class FileSystem(Protocol):
+    """WebDAV server backend interface."""
+
+    async def open(self, name: str) -> BinaryIO:
+        """Open a file for reading."""
+        ...
+
+    async def stat(self, name: str) -> FileInfo:
+        """Get file information."""
+        ...
+
+    async def read_dir(self, name: str, recursive: bool = False) -> list[FileInfo]:
+        """List directory contents."""
+        ...
+
+    async def create(
+        self, name: str, body: BinaryIO, opts: CreateOptions | None = None
+    ) -> tuple[FileInfo, bool]:
+        """Create or update a file.
+
+        Returns:
+            Tuple of (file_info, created) where created is True if file was created
+        """
+        ...
+
+    async def remove_all(self, name: str, opts: RemoveAllOptions | None = None) -> None:
+        """Remove a file or directory recursively."""
+        ...
+
+    async def mkdir(self, name: str) -> None:
+        """Create a directory."""
+        ...
+
+    async def copy(
+        self, name: str, dest: str, options: CopyOptions | None = None
+    ) -> bool:
+        """Copy a file or directory.
+
+        Returns:
+            True if destination was created, False if it was overwritten
+        """
+        ...
+
+    async def move(
+        self, name: str, dest: str, options: MoveOptions | None = None
+    ) -> bool:
+        """Move a file or directory.
+
+        Returns:
+            True if destination was created, False if it was overwritten
+        """
+        ...
+
+
+class WebDAVBackend:
+    """Adapter between FileSystem and internal Backend."""
+
+    def __init__(self, filesystem: FileSystem):
+        self.filesystem = filesystem
+
+    async def options(self, request: Request) -> tuple[list[str], list[str]]:
+        """Handle OPTIONS request."""
+        try:
+            fi = await self.filesystem.stat(request.url.path)
+            allow = [
+                "OPTIONS",
+                "DELETE",
+                "PROPFIND",
+                "COPY",
+                "MOVE",
+            ]
+            if not fi.is_dir:
+                allow.extend(["HEAD", "GET", "PUT"])
+            return [], allow
+        except Exception as err:
+            if is_not_found(err):
+                return [], ["OPTIONS", "PUT", "MKCOL"]
+            raise
+
+    async def head_get(self, request: Request) -> StarletteResponse:
+        """Handle HEAD/GET request."""
+        fi = await self.filesystem.stat(request.url.path)
+        if fi.is_dir:
+            raise HTTPError(405)  # Method Not Allowed
+
+        f = await self.filesystem.open(request.url.path)
+
+        headers = {
+            "Content-Length": str(fi.size),
+        }
+        if fi.mime_type:
+            headers["Content-Type"] = fi.mime_type
+        if fi.mod_time:
+            headers["Last-Modified"] = fi.mod_time.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        if fi.etag:
+            headers["ETag"] = f'"{fi.etag}"'
+
+        if request.method == "HEAD":
+            return StarletteResponse(headers=headers)
+
+        return StreamingResponse(f, headers=headers)
+
+    async def propfind(
+        self, request: Request, propfind: PropFind, depth: Depth
+    ) -> MultiStatus:
+        """Handle PROPFIND request."""
+        fi = await self.filesystem.stat(request.url.path)
+
+        responses: list[Response] = []
+        if depth != Depth.ZERO and fi.is_dir:
+            children = await self.filesystem.read_dir(
+                request.url.path, recursive=(depth == Depth.INFINITY)
+            )
+            for child in children:
+                resp = await self._propfind_file(propfind, child)
+                responses.append(resp)
+        else:
+            resp = await self._propfind_file(propfind, fi)
+            responses.append(resp)
+
+        return MultiStatus(responses=responses)
+
+    async def _propfind_file(self, propfind: PropFind, fi: FileInfo) -> Response:
+        """Create PROPFIND response for a file."""
+        from urllib.parse import urlparse
+
+        from .internal.elements import Href
+
+        # Build properties
+        props: dict[str, etree.Element] = {}
+
+        # Resource type
+        if fi.is_dir:
+            rt = ResourceType(types=[elem.COLLECTION])
+        else:
+            rt = ResourceType(types=[])
+        props[elem.RESOURCE_TYPE] = rt.to_xml()
+
+        if not fi.is_dir:
+            # Content length
+            props[elem.GET_CONTENT_LENGTH] = GetContentLength(length=fi.size).to_xml()
+
+            # Last modified
+            if fi.mod_time:
+                props[elem.GET_LAST_MODIFIED] = GetLastModified(
+                    last_modified=fi.mod_time
+                ).to_xml()
+
+            # Content type
+            if fi.mime_type:
+                props[elem.GET_CONTENT_TYPE] = GetContentType(
+                    content_type=fi.mime_type
+                ).to_xml()
+
+            # ETag
+            if fi.etag:
+                props[elem.GET_ETAG] = GetETag(etag=fi.etag).to_xml()
+
+        # Build response based on propfind type
+        from .internal.elements import Prop, PropStat, Status
+
+        href = Href(url=urlparse(fi.path))
+        propstats: list[PropStat] = []
+
+        if propfind.propname:
+            # Return just property names
+            prop_elements = [etree.Element(tag) for tag in props.keys()]
+            propstats.append(
+                PropStat(
+                    prop=Prop(raw=prop_elements),
+                    status=Status(code=200),
+                )
+            )
+        elif propfind.allprop:
+            # Return all properties
+            prop_elements = list(props.values())
+            propstats.append(
+                PropStat(
+                    prop=Prop(raw=prop_elements),
+                    status=Status(code=200),
+                )
+            )
+        elif propfind.prop:
+            # Return requested properties
+            ok_props: list[etree.Element] = []
+            notfound_props: list[etree.Element] = []
+
+            for req_elem in propfind.prop.raw:
+                tag = req_elem.tag
+                if tag in props:
+                    ok_props.append(props[tag])
+                else:
+                    notfound_props.append(etree.Element(tag))
+
+            if ok_props:
+                propstats.append(
+                    PropStat(
+                        prop=Prop(raw=ok_props),
+                        status=Status(code=200),
+                    )
+                )
+            if notfound_props:
+                propstats.append(
+                    PropStat(
+                        prop=Prop(raw=notfound_props),
+                        status=Status(code=404),
+                    )
+                )
+
+        return Response(hrefs=[href], propstats=propstats)
+
+    async def proppatch(
+        self, request: Request, update: PropertyUpdate
+    ) -> Response:
+        """Handle PROPPATCH request."""
+        fi = await self.filesystem.stat(request.url.path)
+
+        from urllib.parse import urlparse
+
+        from .internal.elements import Href, Prop, PropStat, Status
+
+        href = Href(url=urlparse(fi.path))
+        propstats: list[PropStat] = []
+
+        # All property updates are forbidden (not supported)
+        forbidden_props: list[etree.Element] = []
+
+        for prop in update.set_props:
+            forbidden_props.extend(prop.raw)
+
+        for prop in update.remove:
+            forbidden_props.extend(prop.raw)
+
+        if forbidden_props:
+            propstats.append(
+                PropStat(
+                    prop=Prop(raw=forbidden_props),
+                    status=Status(code=403),  # Forbidden
+                )
+            )
+
+        if not propstats:
+            raise HTTPError(400, Exception("webdav: request missing properties to update"))
+
+        return Response(hrefs=[href], propstats=propstats)
+
+    async def put(self, request: Request) -> StarletteResponse:
+        """Handle PUT request."""
+        if_none_match = ConditionalMatch(request.headers.get("if-none-match", ""))
+        if_match = ConditionalMatch(request.headers.get("if-match", ""))
+
+        opts = CreateOptions(if_match=if_match, if_none_match=if_none_match)
+
+        # Read body into BytesIO
+        body_bytes = await request.body()
+        body = BytesIO(body_bytes)
+
+        fi, created = await self.filesystem.create(request.url.path, body, opts)
+
+        headers: dict[str, str] = {}
+        if fi.mime_type:
+            headers["Content-Type"] = fi.mime_type
+        if fi.mod_time:
+            headers["Last-Modified"] = fi.mod_time.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        if fi.etag:
+            headers["ETag"] = f'"{fi.etag}"'
+
+        status_code = 201 if created else 204
+        return StarletteResponse(status_code=status_code, headers=headers)
+
+    async def delete(self, request: Request) -> None:
+        """Handle DELETE request."""
+        if_none_match = ConditionalMatch(request.headers.get("if-none-match", ""))
+        if_match = ConditionalMatch(request.headers.get("if-match", ""))
+
+        opts = RemoveAllOptions(if_match=if_match, if_none_match=if_none_match)
+        await self.filesystem.remove_all(request.url.path, opts)
+
+    async def mkcol(self, request: Request) -> None:
+        """Handle MKCOL request."""
+        if request.headers.get("content-type"):
+            raise HTTPError(
+                415, Exception("webdav: request body not supported in MKCOL request")
+            )
+
+        try:
+            await self.filesystem.mkdir(request.url.path)
+        except Exception as err:
+            if is_not_found(err):
+                raise HTTPError(409, err) from err  # Conflict
+            raise
+
+    async def copy(
+        self, request: Request, dest: str, recursive: bool, overwrite: bool
+    ) -> bool:
+        """Handle COPY request."""
+        from urllib.parse import urlparse
+
+        dest_path = urlparse(dest).path
+
+        options = CopyOptions(no_recursive=not recursive, no_overwrite=not overwrite)
+
+        try:
+            created = await self.filesystem.copy(request.url.path, dest_path, options)
+            return created
+        except FileExistsError as err:
+            raise HTTPError(412, err) from err  # Precondition Failed
+
+    async def move(self, request: Request, dest: str, overwrite: bool) -> bool:
+        """Handle MOVE request."""
+        from urllib.parse import urlparse
+
+        dest_path = urlparse(dest).path
+
+        options = MoveOptions(no_overwrite=not overwrite)
+
+        try:
+            created = await self.filesystem.move(request.url.path, dest_path, options)
+            return created
+        except FileExistsError as err:
+            raise HTTPError(412, err) from err  # Precondition Failed
+
+
+class Handler:
+    """WebDAV HTTP handler."""
+
+    def __init__(self, filesystem: FileSystem):
+        """Initialize handler.
+
+        Args:
+            filesystem: FileSystem backend
+        """
+        self.filesystem = filesystem
+        self.backend = WebDAVBackend(filesystem)
+        self.internal_handler = InternalHandler(self.backend)
+
+    async def handle(self, request: Request) -> StarletteResponse:
+        """Handle WebDAV HTTP request.
+
+        Args:
+            request: Starlette request
+
+        Returns:
+            Starlette response
+        """
+        if self.filesystem is None:
+            return StarletteResponse(
+                content="webdav: no filesystem available", status_code=500
+            )
+
+        return await self.internal_handler.handle(request)
+
+
+def create_app(filesystem: FileSystem) -> Starlette:
+    """Create a Starlette app for WebDAV.
+
+    Args:
+        filesystem: FileSystem backend
+
+    Returns:
+        Starlette application
+    """
+    handler = Handler(filesystem)
+
+    async def webdav_handler(request: Request) -> StarletteResponse:
+        return await handler.handle(request)
+
+    # Create routes for all HTTP methods and WebDAV methods
+    routes = [
+        Route("/{path:path}", webdav_handler, methods=[
+            "GET", "HEAD", "PUT", "DELETE", "OPTIONS",
+            "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE"
+        ]),
+    ]
+
+    return Starlette(routes=routes)
