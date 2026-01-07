@@ -38,7 +38,9 @@ async def discover_context_url(service: str, domain: str) -> str:
         import socket
 
         loop = asyncio.get_event_loop()
-        addrs = await loop.run_in_executor(None, socket.getaddrinfo, domain, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        addrs = await loop.run_in_executor(
+            None, socket.getaddrinfo, domain, None, socket.AF_UNSPEC, socket.SOCK_STREAM
+        )
 
         if not addrs:
             raise ValueError("webdav: domain doesn't have an SRV record")
@@ -77,15 +79,18 @@ class Client:
         # Ensure path ends with /
         if not self.endpoint.path:
             from urllib.parse import urlunparse
+
             self.endpoint = urlparse(
-                urlunparse((
-                    self.endpoint.scheme,
-                    self.endpoint.netloc,
-                    "/",
-                    self.endpoint.params,
-                    self.endpoint.query,
-                    self.endpoint.fragment,
-                ))
+                urlunparse(
+                    (
+                        self.endpoint.scheme,
+                        self.endpoint.netloc,
+                        "/",
+                        self.endpoint.params,
+                        self.endpoint.query,
+                        self.endpoint.fragment,
+                    )
+                )
             )
 
     def resolve_href(self, path: str) -> str:
@@ -100,21 +105,28 @@ class Client:
         if path.startswith("/"):
             # Absolute path
             from urllib.parse import urlunparse
-            return urlunparse((
-                self.endpoint.scheme,
-                self.endpoint.netloc,
-                path,
-                "",
-                "",
-                "",
-            ))
+
+            return urlunparse(
+                (
+                    self.endpoint.scheme,
+                    self.endpoint.netloc,
+                    path,
+                    "",
+                    "",
+                    "",
+                )
+            )
         else:
             # Relative path
             base_url = self.endpoint.geturl()
             return urljoin(base_url, path)
 
     async def request(
-        self, method: str, path: str, content: bytes | None = None, headers: dict[str, str] | None = None
+        self,
+        method: str,
+        path: str,
+        content: bytes | None = None,
+        headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         """Make an HTTP request.
 
@@ -195,9 +207,7 @@ class Client:
         xml_elem = etree.fromstring(resp.content)
         return MultiStatus.from_xml(xml_elem)
 
-    async def propfind(
-        self, path: str, depth: Depth, propfind: PropFind
-    ) -> MultiStatus:
+    async def propfind(self, path: str, depth: Depth, propfind: PropFind) -> MultiStatus:
         """Perform a PROPFIND request.
 
         Args:
@@ -234,9 +244,7 @@ class Client:
         ms = await self.propfind(path, Depth.ZERO, propfind)
 
         if len(ms.responses) != 1:
-            raise ValueError(
-                f"PROPFIND with Depth: 0 returned {len(ms.responses)} responses"
-            )
+            raise ValueError(f"PROPFIND with Depth: 0 returned {len(ms.responses)} responses")
 
         return ms.responses[0]
 

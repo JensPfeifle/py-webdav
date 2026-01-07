@@ -67,9 +67,7 @@ async def is_request_body_empty(request: Request) -> bool:
 
 def serve_xml(content: etree.Element) -> StarletteResponse:
     """Serve an XML response."""
-    xml_str = etree.tostring(
-        content, encoding="unicode", xml_declaration=True, pretty_print=True
-    )
+    xml_str = etree.tostring(content, encoding="unicode", xml_declaration=True, pretty_print=True)
     return StarletteResponse(
         content=xml_str,
         media_type="application/xml; charset=utf-8",
@@ -79,9 +77,7 @@ def serve_xml(content: etree.Element) -> StarletteResponse:
 def serve_multistatus(ms: MultiStatus) -> StarletteResponse:
     """Serve a multistatus response."""
     xml_elem = ms.to_xml()
-    xml_str = etree.tostring(
-        xml_elem, encoding="unicode", xml_declaration=True, pretty_print=True
-    )
+    xml_str = etree.tostring(xml_elem, encoding="unicode", xml_declaration=True, pretty_print=True)
     return StarletteResponse(
         content=xml_str,
         status_code=207,  # Multi-Status
@@ -104,9 +100,7 @@ class Backend(Protocol):
         """Handle HEAD/GET request."""
         ...
 
-    async def propfind(
-        self, request: Request, pf: PropFind, depth: Depth
-    ) -> MultiStatus:
+    async def propfind(self, request: Request, pf: PropFind, depth: Depth) -> MultiStatus:
         """Handle PROPFIND request."""
         ...
 
@@ -126,9 +120,7 @@ class Backend(Protocol):
         """Handle MKCOL request."""
         ...
 
-    async def copy(
-        self, request: Request, dest: str, recursive: bool, overwrite: bool
-    ) -> bool:
+    async def copy(self, request: Request, dest: str, recursive: bool, overwrite: bool) -> bool:
         """Handle COPY request.
 
         Returns:
@@ -229,9 +221,7 @@ class Handler:
         """Parse Destination header."""
         dest = request.headers.get("destination", "")
         if not dest:
-            raise HTTPError(
-                400, Exception("webdav: missing Destination header in request")
-            )
+            raise HTTPError(400, Exception("webdav: missing Destination header in request"))
         return dest
 
     async def _handle_copy_move(self, request: Request) -> StarletteResponse:

@@ -72,9 +72,7 @@ async def file_info_from_response(resp: elem.Response) -> FileInfo:
         if mod_elem is not None and mod_elem.text:
             from datetime import datetime
 
-            fi.mod_time = datetime.strptime(
-                mod_elem.text, "%a, %d %b %Y %H:%M:%S %Z"
-            )
+            fi.mod_time = datetime.strptime(mod_elem.text, "%a, %d %b %Y %H:%M:%S %Z")
             break
 
     return fi
@@ -97,9 +95,7 @@ FILE_INFO_PROPFIND = PropFind(
 class Client:
     """WebDAV client for accessing remote WebDAV servers."""
 
-    def __init__(
-        self, http_client: httpx.AsyncClient | None = None, endpoint: str = ""
-    ):
+    def __init__(self, http_client: httpx.AsyncClient | None = None, endpoint: str = ""):
         """Initialize WebDAV client.
 
         Args:
@@ -117,9 +113,7 @@ class Client:
         Raises:
             Exception: If unauthenticated or error occurs
         """
-        propfind = PropFind(
-            prop=elem.Prop(raw=[elem.etree.Element(elem.CURRENT_USER_PRINCIPAL)])
-        )
+        propfind = PropFind(prop=elem.Prop(raw=[elem.etree.Element(elem.CURRENT_USER_PRINCIPAL)]))
 
         resp = await self.internal_client.propfind_flat("", propfind)
 
@@ -216,9 +210,7 @@ class Client:
         """
         await self.internal_client.request("MKCOL", name)
 
-    async def copy(
-        self, name: str, dest: str, options: CopyOptions | None = None
-    ) -> None:
+    async def copy(self, name: str, dest: str, options: CopyOptions | None = None) -> None:
         """Copy a file or directory.
 
         Args:
@@ -241,9 +233,7 @@ class Client:
 
         await self.internal_client.request("COPY", name, headers=headers)
 
-    async def move(
-        self, name: str, dest: str, options: MoveOptions | None = None
-    ) -> None:
+    async def move(self, name: str, dest: str, options: MoveOptions | None = None) -> None:
         """Move a file or directory.
 
         Args:

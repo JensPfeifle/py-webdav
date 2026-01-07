@@ -10,9 +10,7 @@ from lxml import etree
 class RawXMLValue:
     """Raw XML value that can be marshaled/unmarshaled."""
 
-    def __init__(
-        self, element: etree.Element | None = None, obj: Any | None = None
-    ) -> None:
+    def __init__(self, element: etree.Element | None = None, obj: Any | None = None) -> None:
         """Initialize raw XML value.
 
         Args:

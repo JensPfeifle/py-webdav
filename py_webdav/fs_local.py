@@ -179,9 +179,7 @@ class LocalFileSystem:
                         file_path = root_path / filename
                         try:
                             webdav_path = self._external_path(file_path)
-                            files.append(
-                                self._file_info_from_stat(file_path, webdav_path)
-                            )
+                            files.append(self._file_info_from_stat(file_path, webdav_path))
                         except (PermissionError, OSError):
                             # Skip files we can't access
                             continue
@@ -207,7 +205,10 @@ class LocalFileSystem:
         return files
 
     def _check_conditional_matches(
-        self, fi: FileInfo | None, if_match: ConditionalMatch | None, if_none_match: ConditionalMatch | None
+        self,
+        fi: FileInfo | None,
+        if_match: ConditionalMatch | None,
+        if_none_match: ConditionalMatch | None,
     ) -> None:
         """Check If-Match and If-None-Match conditions.
 
@@ -341,9 +342,7 @@ class LocalFileSystem:
         # Copy file
         shutil.copy2(src, dst)
 
-    async def copy(
-        self, name: str, dest: str, options: CopyOptions | None = None
-    ) -> bool:
+    async def copy(self, name: str, dest: str, options: CopyOptions | None = None) -> bool:
         """Copy a file or directory.
 
         Args:
@@ -397,9 +396,7 @@ class LocalFileSystem:
         except Exception as e:
             raise HTTPError(500, e) from e
 
-    async def move(
-        self, name: str, dest: str, options: MoveOptions | None = None
-    ) -> bool:
+    async def move(self, name: str, dest: str, options: MoveOptions | None = None) -> bool:
         """Move a file or directory.
 
         Args:

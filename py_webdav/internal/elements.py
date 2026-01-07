@@ -54,9 +54,7 @@ class Status:
         try:
             code = int(parts[1])
         except ValueError as e:
-            raise ValueError(
-                f"webdav: invalid HTTP status {s!r}: failed to parse code: {e}"
-            ) from e
+            raise ValueError(f"webdav: invalid HTTP status {s!r}: failed to parse code: {e}") from e
 
         return Status(code=code, text=parts[2])
 

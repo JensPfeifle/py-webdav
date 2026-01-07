@@ -71,9 +71,7 @@ class FileSystem(Protocol):
         """Create a directory."""
         ...
 
-    async def copy(
-        self, name: str, dest: str, options: CopyOptions | None = None
-    ) -> bool:
+    async def copy(self, name: str, dest: str, options: CopyOptions | None = None) -> bool:
         """Copy a file or directory.
 
         Returns:
@@ -81,9 +79,7 @@ class FileSystem(Protocol):
         """
         ...
 
-    async def move(
-        self, name: str, dest: str, options: MoveOptions | None = None
-    ) -> bool:
+    async def move(self, name: str, dest: str, options: MoveOptions | None = None) -> bool:
         """Move a file or directory.
 
         Returns:
@@ -140,9 +136,7 @@ class WebDAVBackend:
 
         return StreamingResponse(f, headers=headers)
 
-    async def propfind(
-        self, request: Request, propfind: PropFind, depth: Depth
-    ) -> MultiStatus:
+    async def propfind(self, request: Request, propfind: PropFind, depth: Depth) -> MultiStatus:
         """Handle PROPFIND request."""
         fi = await self.filesystem.stat(request.url.path)
 
@@ -182,15 +176,11 @@ class WebDAVBackend:
 
             # Last modified
             if fi.mod_time:
-                props[elem.GET_LAST_MODIFIED] = GetLastModified(
-                    last_modified=fi.mod_time
-                ).to_xml()
+                props[elem.GET_LAST_MODIFIED] = GetLastModified(last_modified=fi.mod_time).to_xml()
 
             # Content type
             if fi.mime_type:
-                props[elem.GET_CONTENT_TYPE] = GetContentType(
-                    content_type=fi.mime_type
-                ).to_xml()
+                props[elem.GET_CONTENT_TYPE] = GetContentType(content_type=fi.mime_type).to_xml()
 
             # ETag
             if fi.etag:
@@ -249,9 +239,7 @@ class WebDAVBackend:
 
         return Response(hrefs=[href], propstats=propstats)
 
-    async def proppatch(
-        self, request: Request, update: PropertyUpdate
-    ) -> Response:
+    async def proppatch(self, request: Request, update: PropertyUpdate) -> Response:
         """Handle PROPPATCH request."""
         fi = await self.filesystem.stat(request.url.path)
 
@@ -319,9 +307,7 @@ class WebDAVBackend:
     async def mkcol(self, request: Request) -> None:
         """Handle MKCOL request."""
         if request.headers.get("content-type"):
-            raise HTTPError(
-                415, Exception("webdav: request body not supported in MKCOL request")
-            )
+            raise HTTPError(415, Exception("webdav: request body not supported in MKCOL request"))
 
         try:
             await self.filesystem.mkdir(request.url.path)
@@ -330,9 +316,7 @@ class WebDAVBackend:
                 raise HTTPError(409, err) from err  # Conflict
             raise
 
-    async def copy(
-        self, request: Request, dest: str, recursive: bool, overwrite: bool
-    ) -> bool:
+    async def copy(self, request: Request, dest: str, recursive: bool, overwrite: bool) -> bool:
         """Handle COPY request."""
         from urllib.parse import urlparse
 
@@ -384,9 +368,7 @@ class Handler:
             Starlette response
         """
         if self.filesystem is None:
-            return StarletteResponse(
-                content="webdav: no filesystem available", status_code=500
-            )
+            return StarletteResponse(content="webdav: no filesystem available", status_code=500)
 
         return await self.internal_handler.handle(request)
 
@@ -407,10 +389,22 @@ def create_app(filesystem: FileSystem) -> Starlette:
 
     # Create routes for all HTTP methods and WebDAV methods
     routes = [
-        Route("/{path:path}", webdav_handler, methods=[
-            "GET", "HEAD", "PUT", "DELETE", "OPTIONS",
-            "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE"
-        ]),
+        Route(
+            "/{path:path}",
+            webdav_handler,
+            methods=[
+                "GET",
+                "HEAD",
+                "PUT",
+                "DELETE",
+                "OPTIONS",
+                "PROPFIND",
+                "PROPPATCH",
+                "MKCOL",
+                "COPY",
+                "MOVE",
+            ],
+        ),
     ]
 
     return Starlette(routes=routes)
