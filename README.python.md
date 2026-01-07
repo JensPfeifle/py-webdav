@@ -12,13 +12,21 @@ This is a Python conversion of the original Go library. Current implementation s
   - WebDAV client and server
   - Full property support
 
-- ⚠️ **CalDAV**: Minimal stub implementation
-  - Basic types defined
-  - Full calendar support pending
+- ✅ **CalDAV**: Complete types and validation
+  - All CalDAV types (Calendar, CalendarObject, CalendarQuery, etc.)
+  - iCalendar validation using icalendar library
+  - Filter types for queries (CompFilter, PropFilter, TextMatch)
+  - Sync and multiget support structures
+  - Server/client implementation ready for backends
 
-- ⚠️ **CardDAV**: Minimal stub implementation
-  - Basic types defined
-  - Full vCard support pending
+- ✅ **CardDAV**: Complete types and validation
+  - All CardDAV types (AddressBook, AddressObject, AddressBookQuery, etc.)
+  - vCard validation using vobject library
+  - Filter types for queries (PropFilter, ParamFilter, TextMatch)
+  - Sync and multiget support structures
+  - Server/client implementation ready for backends
+
+Note: CalDAV and CardDAV have complete type definitions and validation. Full server/client implementations with XML serialization and backend interfaces can be added as needed.
 
 ## Installation
 
@@ -135,21 +143,20 @@ MIT License (same as original Go library)
 
 ## TODO
 
-- [ ] Complete CalDAV implementation
-  - [ ] Calendar server backend
-  - [ ] Calendar client
-  - [ ] iCalendar parsing and validation
-  - [ ] REPORT method support
+- [ ] CalDAV server/client XML serialization
+  - [ ] XML element encoding/decoding for CalDAV
+  - [ ] REPORT method implementation
+  - [ ] Calendar backend interface
 
-- [ ] Complete CardDAV implementation
-  - [ ] Address book server backend
-  - [ ] Address book client
-  - [ ] vCard parsing and validation
+- [ ] CardDAV server/client XML serialization
+  - [ ] XML element encoding/decoding for CardDAV
+  - [ ] REPORT method implementation
+  - [ ] Address book backend interface
 
 - [ ] Convert tests from Go to pytest
-- [ ] Add WebDAV compliance tests
+- [ ] Add WebDAV/CalDAV/CardDAV compliance tests
 - [ ] Performance optimization
-- [ ] Documentation and examples
+- [ ] More usage examples and documentation
 
 ## References
 
