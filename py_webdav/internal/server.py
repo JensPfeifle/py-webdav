@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import Protocol
 
 from lxml import etree
@@ -12,11 +11,11 @@ from starlette.responses import Response as StarletteResponse
 from .elements import (
     NAMESPACE,
     MultiStatus,
-    PropFind,
     PropertyUpdate,
+    PropFind,
     Response,
 )
-from .internal import Depth, HTTPError, format_overwrite, parse_depth, parse_overwrite
+from .internal import Depth, HTTPError, parse_depth, parse_overwrite
 
 
 def serve_error(err: Exception) -> StarletteResponse:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import mimetypes
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO
 
@@ -62,8 +62,8 @@ class LocalFileSystem:
         # Security check: ensure path is within root_dir
         try:
             local_path.relative_to(self.root_dir)
-        except ValueError:
-            raise HTTPError(403, Exception("webdav: path outside root directory"))
+        except ValueError as e:
+            raise HTTPError(403, Exception("webdav: path outside root directory")) from e
 
         return local_path
 
@@ -122,7 +122,7 @@ class LocalFileSystem:
         return FileInfo(
             path=webdav_path,
             size=stat.st_size if not path.is_dir() else 0,
-            mod_time=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+            mod_time=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
             is_dir=path.is_dir(),
             mime_type=mime_type,
             etag=etag,
@@ -167,7 +167,7 @@ class LocalFileSystem:
         try:
             if recursive:
                 # Walk directory recursively
-                for root, dirs, filenames in os.walk(path):
+                for root, _dirs, filenames in os.walk(path):
                     root_path = Path(root)
 
                     # Add directory itself

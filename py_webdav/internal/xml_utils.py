@@ -41,11 +41,11 @@ class RawXMLValue:
             raise ValueError("Cannot decode: no element")
 
         # For simple types, just return the text
-        if obj_type == str:
+        if obj_type is str:
             return self.element.text or ""
-        elif obj_type == int:
+        elif obj_type is int:
             return int(self.element.text or "0")
-        elif obj_type == bool:
+        elif obj_type is bool:
             return (self.element.text or "").lower() in ("true", "1", "yes")
 
         # For complex types, would need custom decoding logic

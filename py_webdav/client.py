@@ -10,7 +10,6 @@ import httpx
 from .internal import Client as InternalClient
 from .internal import Depth, PropFind
 from .internal import elements as elem
-from .internal import is_not_found
 from .webdav import CopyOptions, FileInfo, MoveOptions
 
 

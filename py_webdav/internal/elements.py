@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from http import HTTPStatus
-from typing import Any
-from urllib.parse import ParseResult as URL, urlparse
+from urllib.parse import ParseResult as URL
+from urllib.parse import urlparse
 
 from lxml import etree
 

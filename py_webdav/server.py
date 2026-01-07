@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from io import BytesIO
 from typing import BinaryIO, Protocol
 
 from lxml import etree
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import Response as StarletteResponse, StreamingResponse
+from starlette.responses import Response as StarletteResponse
+from starlette.responses import StreamingResponse
 from starlette.routing import Route
 
 from .internal import (
@@ -20,15 +20,14 @@ from .internal import (
     GetLastModified,
     HTTPError,
     MultiStatus,
-    PropFind,
     PropertyUpdate,
+    PropFind,
     ResourceType,
     Response,
+    is_not_found,
 )
-from .internal import Backend as InternalBackend
 from .internal import Handler as InternalHandler
 from .internal import elements as elem
-from .internal import is_not_found, serve_multistatus
 from .webdav import (
     ConditionalMatch,
     CopyOptions,

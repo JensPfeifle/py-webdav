@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -11,12 +10,10 @@ from lxml import etree
 
 from .elements import (
     NAMESPACE,
-    Limit,
     MultiStatus,
     Prop,
     PropFind,
     Response,
-    SyncCollectionQuery,
 )
 from .internal import Depth, HTTPError, depth_to_string
 
@@ -34,8 +31,7 @@ async def discover_context_url(service: str, domain: str) -> str:
         URL to the CardDAV/CalDAV server
     """
     # Look up SRV records (TLS only for security)
-    srv_name = f"_{service}s._tcp.{domain}"
-
+    # Note: Full DNS-based service discovery is not implemented
     try:
         # Python's asyncio doesn't have built-in async DNS resolution
         # We'll use a simple synchronous approach wrapped in executor
@@ -52,7 +48,6 @@ async def discover_context_url(service: str, domain: str) -> str:
         port = 443
 
         # Look up TXT record for path
-        txt_name = f"_{service}s._tcp.{domain}"
         # In a real implementation, we'd look up TXT records
         # For now, use the well-known path
         path = f"/.well-known/{service}"
@@ -142,7 +137,6 @@ class Client:
             wrapped_err: Exception | None = None
             if "application/xml" in content_type or "text/xml" in content_type:
                 try:
-                    from .elements import Error
                     # Try to parse error
                     # For now, just use the response text
                     wrapped_err = Exception(resp.text[:1024])
@@ -298,14 +292,7 @@ class Client:
         Returns:
             Multistatus response
         """
-        query = SyncCollectionQuery(
-            sync_token=sync_token,
-            sync_level=depth_to_string(level),
-            limit=limit,
-            prop=prop,
-        )
-
-        # Build XML
+        # Build XML directly
         root = etree.Element(f"{{{NAMESPACE}}}sync-collection")
         token_el = etree.SubElement(root, f"{{{NAMESPACE}}}sync-token")
         token_el.text = sync_token
