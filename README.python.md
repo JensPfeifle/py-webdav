@@ -30,6 +30,21 @@ Note: CalDAV and CardDAV have complete type definitions and validation. Full ser
 
 ## Installation
 
+### Using Docker (Easiest)
+
+```bash
+# Using docker-compose
+docker-compose up -d
+
+# Or build and run manually
+docker build -t py-webdav .
+docker run -d -p 8080:8080 -v $(pwd)/webdav-data:/data py-webdav
+```
+
+See [DOCKER.md](DOCKER.md) for detailed Docker instructions.
+
+### Local Installation
+
 ```bash
 # Using uv (recommended)
 uv sync
