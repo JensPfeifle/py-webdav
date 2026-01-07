@@ -179,8 +179,10 @@ class Client:
         Returns:
             HTTP response
         """
-        xml_str = etree.tostring(xml_obj, encoding="unicode", xml_declaration=True)
-        xml_bytes = xml_str.encode("utf-8")
+        # Serialize to bytes directly with XML declaration
+        xml_bytes = etree.tostring(
+            xml_obj, encoding="utf-8", xml_declaration=True, pretty_print=False
+        )
 
         req_headers = headers or {}
         req_headers["Content-Type"] = "text/xml; charset=utf-8"

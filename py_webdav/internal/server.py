@@ -67,9 +67,10 @@ async def is_request_body_empty(request: Request) -> bool:
 
 def serve_xml(content: etree.Element) -> StarletteResponse:
     """Serve an XML response."""
-    xml_str = etree.tostring(content, encoding="unicode", xml_declaration=True, pretty_print=True)
+    # Serialize to bytes with XML declaration
+    xml_bytes = etree.tostring(content, encoding="utf-8", xml_declaration=True, pretty_print=True)
     return StarletteResponse(
-        content=xml_str,
+        content=xml_bytes,
         media_type="application/xml; charset=utf-8",
     )
 
@@ -77,9 +78,10 @@ def serve_xml(content: etree.Element) -> StarletteResponse:
 def serve_multistatus(ms: MultiStatus) -> StarletteResponse:
     """Serve a multistatus response."""
     xml_elem = ms.to_xml()
-    xml_str = etree.tostring(xml_elem, encoding="unicode", xml_declaration=True, pretty_print=True)
+    # Serialize to bytes with XML declaration
+    xml_bytes = etree.tostring(xml_elem, encoding="utf-8", xml_declaration=True, pretty_print=True)
     return StarletteResponse(
-        content=xml_str,
+        content=xml_bytes,
         status_code=207,  # Multi-Status
         media_type="application/xml; charset=utf-8",
     )
