@@ -15,7 +15,7 @@ services:
       - WEBDAV_DIR=/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080')"]
+      test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8080', method='OPTIONS'); urllib.request.urlopen(req)"]
       interval: 30s
       timeout: 10s
       retries: 3
