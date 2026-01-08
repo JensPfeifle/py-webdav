@@ -417,6 +417,64 @@ class Handler:
                 )
                 return await serve_principal(request, options)
 
+            # Check if this is a CalDAV home set path request (PROPFIND only)
+            if (
+                request.method == "PROPFIND"
+                and request.url.path == self.calendar_home_path
+            ):
+                from .caldav.server import handle_caldav_propfind
+                from .internal import parse_depth
+                from .internal.server import decode_xml_request, is_request_body_empty
+
+                try:
+                    # Parse PROPFIND request
+                    if await is_request_body_empty(request):
+                        propfind = PropFind(allprop=True)
+                    else:
+                        xml_elem = await decode_xml_request(request, PropFind)
+                        propfind = PropFind.from_xml(xml_elem)
+
+                    # Parse depth header
+                    depth_str = request.headers.get("depth", "0")
+                    depth = parse_depth(depth_str)
+
+                    return await handle_caldav_propfind(
+                        request, propfind, depth, self.calendar_home_path, self.principal_path
+                    )
+                except HTTPError as e:
+                    return StarletteResponse(content=str(e), status_code=e.code)
+                except Exception as e:
+                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+
+            # Check if this is a CardDAV home set path request (PROPFIND only)
+            if (
+                request.method == "PROPFIND"
+                and request.url.path == self.addressbook_home_path
+            ):
+                from .carddav.server import handle_carddav_propfind
+                from .internal import parse_depth
+                from .internal.server import decode_xml_request, is_request_body_empty
+
+                try:
+                    # Parse PROPFIND request
+                    if await is_request_body_empty(request):
+                        propfind = PropFind(allprop=True)
+                    else:
+                        xml_elem = await decode_xml_request(request, PropFind)
+                        propfind = PropFind.from_xml(xml_elem)
+
+                    # Parse depth header
+                    depth_str = request.headers.get("depth", "0")
+                    depth = parse_depth(depth_str)
+
+                    return await handle_carddav_propfind(
+                        request, propfind, depth, self.addressbook_home_path, self.principal_path
+                    )
+                except HTTPError as e:
+                    return StarletteResponse(content=str(e), status_code=e.code)
+                except Exception as e:
+                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+
         return await self.internal_handler.handle(request)
 
 

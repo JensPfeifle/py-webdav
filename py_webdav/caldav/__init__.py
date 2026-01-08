@@ -16,6 +16,7 @@ from .caldav import (
     TextMatch,
     validate_calendar_object,
 )
+from .server import handle_caldav_propfind
 
 __all__ = [
     "CAPABILITY_CALENDAR",
@@ -32,4 +33,5 @@ __all__ = [
     "SyncResponse",
     "TextMatch",
     "validate_calendar_object",
+    "handle_caldav_propfind",
 ]

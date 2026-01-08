@@ -13,6 +13,7 @@ from .carddav import (
     TextMatch,
     validate_address_object,
 )
+from .server import handle_carddav_propfind
 
 __all__ = [
     "CAPABILITY_ADDRESSBOOK",
@@ -26,4 +27,5 @@ __all__ = [
     "SyncResponse",
     "TextMatch",
     "validate_address_object",
+    "handle_carddav_propfind",
 ]
