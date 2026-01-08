@@ -158,20 +158,24 @@ MIT License (same as original Go library)
 
 ## TODO
 
-- [ ] CalDAV server/client XML serialization
-  - [ ] XML element encoding/decoding for CalDAV
-  - [ ] REPORT method implementation
-  - [ ] Calendar backend interface
+- [ ] CalDAV advanced features (optional)
+  - [ ] calendar-query REPORT method
+  - [ ] calendar-multiget REPORT method
+  - [ ] Full CalDAV server handler with XML serialization
+  - [ ] CalDAV client for querying remote calendars
 
-- [ ] CardDAV server/client XML serialization
-  - [ ] XML element encoding/decoding for CardDAV
-  - [ ] REPORT method implementation
-  - [ ] Address book backend interface
+- [ ] CardDAV advanced features (optional)
+  - [ ] addressbook-query REPORT method
+  - [ ] addressbook-multiget REPORT method
+  - [ ] Full CardDAV server handler with XML serialization
+  - [ ] CardDAV client for querying remote address books
 
-- [ ] Convert tests from Go to pytest
+- [x] Convert tests from Go to pytest ✅
 - [ ] Add WebDAV/CalDAV/CardDAV compliance tests
 - [ ] Performance optimization
 - [ ] More usage examples and documentation
+
+**Note**: The items marked as "optional" are advanced query features. The current implementation is **fully functional** for basic WebDAV file serving, including storing and retrieving CalDAV (.ics) and CardDAV (.vcf) files.
 
 ## References
 
