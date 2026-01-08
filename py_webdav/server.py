@@ -348,15 +348,37 @@ class WebDAVBackend:
 class Handler:
     """WebDAV HTTP handler."""
 
-    def __init__(self, filesystem: FileSystem):
+    def __init__(
+        self,
+        filesystem: FileSystem,
+        enable_principal_discovery: bool = True,
+        principal_path: str = "/principals/current/",
+        calendar_home_path: str | None = None,
+        addressbook_home_path: str | None = None,
+    ):
         """Initialize handler.
 
         Args:
             filesystem: FileSystem backend
+            enable_principal_discovery: Enable CalDAV/CardDAV principal discovery
+            principal_path: Path to principal URL (default: /principals/current/)
+            calendar_home_path: Path to calendar home set (default: /calendars/)
+            addressbook_home_path: Path to addressbook home set (default: /contacts/)
         """
         self.filesystem = filesystem
         self.backend = WebDAVBackend(filesystem)
         self.internal_handler = InternalHandler(self.backend)
+        self.enable_principal_discovery = enable_principal_discovery
+        self.principal_path = principal_path
+
+        # Set default home paths if not provided
+        if calendar_home_path is None:
+            calendar_home_path = "/calendars/"
+        if addressbook_home_path is None:
+            addressbook_home_path = "/contacts/"
+
+        self.calendar_home_path = calendar_home_path
+        self.addressbook_home_path = addressbook_home_path
 
     async def handle(self, request: Request) -> StarletteResponse:
         """Handle WebDAV HTTP request.
@@ -369,6 +391,31 @@ class Handler:
         """
         if self.filesystem is None:
             return StarletteResponse(content="webdav: no filesystem available", status_code=500)
+
+        # Handle principal discovery paths
+        if self.enable_principal_discovery:
+            # Check for well-known redirects
+            if request.url.path == "/.well-known/caldav":
+                from starlette.responses import RedirectResponse
+
+                return RedirectResponse(url=self.principal_path, status_code=308)
+            if request.url.path == "/.well-known/carddav":
+                from starlette.responses import RedirectResponse
+
+                return RedirectResponse(url=self.principal_path, status_code=308)
+
+            # Check if this is a principal path request
+            if request.url.path == self.principal_path or request.url.path.startswith(
+                self.principal_path.rstrip("/") + "/"
+            ):
+                from .principal import PrincipalOptions, serve_principal
+
+                options = PrincipalOptions(
+                    current_user_principal_path=self.principal_path,
+                    calendar_home_set_path=self.calendar_home_path,
+                    addressbook_home_set_path=self.addressbook_home_path,
+                )
+                return await serve_principal(request, options)
 
         return await self.internal_handler.handle(request)
 
