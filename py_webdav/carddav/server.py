@@ -388,6 +388,10 @@ def _propfind_address_object(obj, propfind: PropFind) -> WebDAVResponse:
     if obj.mod_time:
         props[f"{{{NAMESPACE}}}getlastmodified"] = lambda: _create_last_modified(obj.mod_time)
 
+    # Address data (the actual vCard content)
+    CARDDAV_NS = "urn:ietf:params:xml:ns:carddav"
+    props[f"{{{CARDDAV_NS}}}address-data"] = lambda: _create_address_data(obj.data)
+
     # Determine which properties to return
     requested_props = []
     if propfind.allprop:
@@ -515,6 +519,14 @@ def _create_current_user_privilege_set() -> etree.Element:
     privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
     etree.SubElement(privilege, f"{{{NAMESPACE}}}write")
 
+    return elem
+
+
+def _create_address_data(vcard_data: str) -> etree.Element:
+    """Create address-data XML element with vCard content."""
+    CARDDAV_NS = "urn:ietf:params:xml:ns:carddav"
+    elem = etree.Element(f"{{{CARDDAV_NS}}}address-data")
+    elem.text = vcard_data
     return elem
 
 

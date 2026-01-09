@@ -399,6 +399,10 @@ def _propfind_calendar_object(obj, propfind: PropFind) -> WebDAVResponse:
     if obj.mod_time:
         props[f"{{{NAMESPACE}}}getlastmodified"] = lambda: _create_last_modified(obj.mod_time)
 
+    # Calendar data (the actual iCalendar content)
+    CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
+    props[f"{{{CALDAV_NS}}}calendar-data"] = lambda: _create_calendar_data(obj.data)
+
     # Determine which properties to return
     requested_props = []
     if propfind.allprop:
@@ -538,6 +542,14 @@ def _create_current_user_privilege_set() -> etree.Element:
     privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
     etree.SubElement(privilege, f"{{{NAMESPACE}}}write")
 
+    return elem
+
+
+def _create_calendar_data(ical_data: str) -> etree.Element:
+    """Create calendar-data XML element with iCalendar content."""
+    CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
+    elem = etree.Element(f"{{{CALDAV_NS}}}calendar-data")
+    elem.text = ical_data
     return elem
 
 
