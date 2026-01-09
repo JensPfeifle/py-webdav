@@ -355,6 +355,8 @@ class Handler:
         principal_path: str = "/principals/current/",
         calendar_home_path: str | None = None,
         addressbook_home_path: str | None = None,
+        caldav_backend=None,
+        carddav_backend=None,
     ):
         """Initialize handler.
 
@@ -364,6 +366,8 @@ class Handler:
             principal_path: Path to principal URL (default: /principals/current/)
             calendar_home_path: Path to calendar home set (default: /calendars/)
             addressbook_home_path: Path to addressbook home set (default: /contacts/)
+            caldav_backend: Optional CalDAV backend instance
+            carddav_backend: Optional CardDAV backend instance
         """
         self.filesystem = filesystem
         self.backend = WebDAVBackend(filesystem)
@@ -379,6 +383,8 @@ class Handler:
 
         self.calendar_home_path = calendar_home_path
         self.addressbook_home_path = addressbook_home_path
+        self.caldav_backend = caldav_backend
+        self.carddav_backend = carddav_backend
 
     async def handle(self, request: Request) -> StarletteResponse:
         """Handle WebDAV HTTP request.
@@ -417,10 +423,10 @@ class Handler:
                 )
                 return await serve_principal(request, options)
 
-            # Check if this is a CalDAV home set path request (PROPFIND only)
+            # Check if this is a CalDAV path request (home set or calendars within it)
             if (
                 request.method == "PROPFIND"
-                and request.url.path == self.calendar_home_path
+                and (request.url.path == self.calendar_home_path or request.url.path.startswith(self.calendar_home_path))
             ):
                 from .caldav.server import handle_caldav_propfind
                 from .internal import parse_depth
@@ -439,17 +445,17 @@ class Handler:
                     depth = parse_depth(depth_str)
 
                     return await handle_caldav_propfind(
-                        request, propfind, depth, self.calendar_home_path, self.principal_path
+                        request, propfind, depth, self.calendar_home_path, self.principal_path, self.caldav_backend
                     )
                 except HTTPError as e:
                     return StarletteResponse(content=str(e), status_code=e.code)
                 except Exception as e:
                     return StarletteResponse(content=f"Internal error: {e}", status_code=500)
 
-            # Check if this is a CardDAV home set path request (PROPFIND only)
+            # Check if this is a CardDAV path request (home set or addressbooks within it)
             if (
                 request.method == "PROPFIND"
-                and request.url.path == self.addressbook_home_path
+                and (request.url.path == self.addressbook_home_path or request.url.path.startswith(self.addressbook_home_path))
             ):
                 from .carddav.server import handle_carddav_propfind
                 from .internal import parse_depth
@@ -468,7 +474,7 @@ class Handler:
                     depth = parse_depth(depth_str)
 
                     return await handle_carddav_propfind(
-                        request, propfind, depth, self.addressbook_home_path, self.principal_path
+                        request, propfind, depth, self.addressbook_home_path, self.principal_path, self.carddav_backend
                     )
                 except HTTPError as e:
                     return StarletteResponse(content=str(e), status_code=e.code)

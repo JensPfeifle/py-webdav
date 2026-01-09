@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import IntEnum
 from typing import Protocol
 
@@ -74,6 +75,7 @@ async def handle_carddav_propfind(
     depth: Depth,
     addressbook_home_path: str,
     principal_path: str,
+    backend: CardDAVBackend | None = None,
 ) -> Response:
     """Handle CardDAV PROPFIND request.
 
@@ -83,6 +85,7 @@ async def handle_carddav_propfind(
         depth: Depth header value
         addressbook_home_path: Path to addressbook home set
         principal_path: Path to user principal
+        backend: CardDAV backend instance (optional)
 
     Returns:
         Multi-status response
@@ -98,8 +101,30 @@ async def handle_carddav_propfind(
             )
             responses.append(resp)
 
-            # TODO: If depth > 0, list all addressbooks within the home set
-            # For now, just list the home set itself
+            # If depth > 0, list all addressbooks within the home set
+            if depth == Depth.ONE and backend is not None:
+                addressbooks = await backend.list_addressbooks(request)
+                for addressbook in addressbooks:
+                    resp = _propfind_addressbook(addressbook, propfind, principal_path, addressbook_home_path)
+                    responses.append(resp)
+
+    elif resource_type == ResourceType.ADDRESSBOOK:
+        # Individual addressbook PROPFIND
+        if backend is not None:
+            try:
+                addressbook = await backend.get_addressbook(request, request.url.path)
+                resp = _propfind_addressbook(addressbook, propfind, principal_path, addressbook_home_path)
+                responses.append(resp)
+
+                # If depth > 0, list address objects
+                if depth == Depth.ONE:
+                    objects = await backend.list_address_objects(request, addressbook.path)
+                    for obj in objects:
+                        resp = _propfind_address_object(obj, propfind)
+                        responses.append(resp)
+            except Exception:
+                # Addressbook not found or error
+                pass
 
     ms = MultiStatus(responses=responses)
     return serve_multistatus(ms)
@@ -225,4 +250,226 @@ def _create_displayname(name: str) -> etree.Element:
     """Create displayname XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}displayname")
     elem.text = name
+    return elem
+
+
+def _propfind_addressbook(
+    addressbook, propfind: PropFind, principal_path: str, home_set_path: str
+) -> WebDAVResponse:
+    """Create PROPFIND response for an addressbook collection.
+
+    Args:
+        addressbook: AddressBook object
+        propfind: PropFind request
+        principal_path: User principal path
+        home_set_path: Addressbook home set path
+
+    Returns:
+        WebDAV Response
+    """
+    from ..internal.elements import Prop, PropStat, Status
+
+    # Build property functions
+    props: dict[str, callable] = {}
+
+    # Resource type - collection with addressbook
+    props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_addressbook_resourcetype()
+
+    # Current user principal
+    props[f"{{{NAMESPACE}}}current-user-principal"] = (
+        lambda: _create_current_user_principal(principal_path)
+    )
+
+    # Addressbook home set
+    props["{urn:ietf:params:xml:ns:carddav}addressbook-home-set"] = (
+        lambda: _create_addressbook_home_set(home_set_path)
+    )
+
+    # Display name
+    props[f"{{{NAMESPACE}}}displayname"] = lambda: _create_displayname(addressbook.name)
+
+    # Determine which properties to return
+    requested_props = []
+    if propfind.allprop:
+        requested_props = list(props.keys())
+    elif propfind.propname:
+        requested_props = list(props.keys())
+    elif propfind.prop:
+        for prop_elem in propfind.prop.raw:
+            if "}" in prop_elem.tag:
+                prop_name = prop_elem.tag
+            else:
+                ns = prop_elem.nsmap.get(prop_elem.prefix) if prop_elem.prefix else ""
+                tag = prop_elem.tag.split("}")[-1]
+                prop_name = f"{{{ns}}}{tag}" if ns else tag
+            requested_props.append(prop_name)
+
+    # Build prop element with found properties
+    found_props = []
+    not_found_props = []
+
+    for prop_name in requested_props:
+        if prop_name in props:
+            try:
+                prop_value = props[prop_name]()
+                found_props.append(prop_value)
+            except Exception:
+                not_found_props.append(prop_name)
+        else:
+            not_found_props.append(prop_name)
+
+    # Create propstats
+    propstats = []
+
+    if found_props:
+        prop = Prop(raw=found_props)
+        propstat = PropStat(
+            prop=prop, status=Status(code=200, text="OK"), response_description=""
+        )
+        propstats.append(propstat)
+
+    if not_found_props:
+        not_found_elements = []
+        for prop_name in not_found_props:
+            elem = etree.Element(prop_name)
+            not_found_elements.append(elem)
+
+        prop = Prop(raw=not_found_elements)
+        propstat = PropStat(
+            prop=prop, status=Status(code=404, text="Not Found"), response_description=""
+        )
+        propstats.append(propstat)
+
+    return WebDAVResponse(
+        hrefs=[Href.from_string(addressbook.path)],
+        propstats=propstats,
+        status=None,
+    )
+
+
+def _propfind_address_object(obj, propfind: PropFind) -> WebDAVResponse:
+    """Create PROPFIND response for an address object.
+
+    Args:
+        obj: AddressObject
+        propfind: PropFind request
+
+    Returns:
+        WebDAV Response
+    """
+    from ..internal.elements import Prop, PropStat, Status
+
+    # Build property functions
+    props: dict[str, callable] = {}
+
+    # Resource type - empty for non-collections
+    props[f"{{{NAMESPACE}}}resourcetype"] = lambda: etree.Element(f"{{{NAMESPACE}}}resourcetype")
+
+    # ETag
+    props[f"{{{NAMESPACE}}}getetag"] = lambda: _create_etag(obj.etag)
+
+    # Content length
+    props[f"{{{NAMESPACE}}}getcontentlength"] = lambda: _create_content_length(obj.content_length)
+
+    # Content type
+    props[f"{{{NAMESPACE}}}getcontenttype"] = lambda: _create_content_type("text/vcard")
+
+    # Last modified
+    if obj.mod_time:
+        props[f"{{{NAMESPACE}}}getlastmodified"] = lambda: _create_last_modified(obj.mod_time)
+
+    # Determine which properties to return
+    requested_props = []
+    if propfind.allprop:
+        requested_props = list(props.keys())
+    elif propfind.propname:
+        requested_props = list(props.keys())
+    elif propfind.prop:
+        for prop_elem in propfind.prop.raw:
+            if "}" in prop_elem.tag:
+                prop_name = prop_elem.tag
+            else:
+                ns = prop_elem.nsmap.get(prop_elem.prefix) if prop_elem.prefix else ""
+                tag = prop_elem.tag.split("}")[-1]
+                prop_name = f"{{{ns}}}{tag}" if ns else tag
+            requested_props.append(prop_name)
+
+    # Build prop element with found properties
+    found_props = []
+    not_found_props = []
+
+    for prop_name in requested_props:
+        if prop_name in props:
+            try:
+                prop_value = props[prop_name]()
+                found_props.append(prop_value)
+            except Exception:
+                not_found_props.append(prop_name)
+        else:
+            not_found_props.append(prop_name)
+
+    # Create propstats
+    propstats = []
+
+    if found_props:
+        prop = Prop(raw=found_props)
+        propstat = PropStat(
+            prop=prop, status=Status(code=200, text="OK"), response_description=""
+        )
+        propstats.append(propstat)
+
+    if not_found_props:
+        not_found_elements = []
+        for prop_name in not_found_props:
+            elem = etree.Element(prop_name)
+            not_found_elements.append(elem)
+
+        prop = Prop(raw=not_found_elements)
+        propstat = PropStat(
+            prop=prop, status=Status(code=404, text="Not Found"), response_description=""
+        )
+        propstats.append(propstat)
+
+    return WebDAVResponse(
+        hrefs=[Href.from_string(obj.path)],
+        propstats=propstats,
+        status=None,
+    )
+
+
+def _create_addressbook_resourcetype() -> etree.Element:
+    """Create resourcetype XML element for addressbook."""
+    rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
+    etree.SubElement(rt, COLLECTION)
+    etree.SubElement(rt, "{urn:ietf:params:xml:ns:carddav}addressbook")
+    return rt
+
+
+def _create_etag(etag: str) -> etree.Element:
+    """Create getetag XML element."""
+    elem = etree.Element(f"{{{NAMESPACE}}}getetag")
+    elem.text = f'"{etag}"'
+    return elem
+
+
+def _create_content_length(length: int) -> etree.Element:
+    """Create getcontentlength XML element."""
+    elem = etree.Element(f"{{{NAMESPACE}}}getcontentlength")
+    elem.text = str(length)
+    return elem
+
+
+def _create_content_type(content_type: str) -> etree.Element:
+    """Create getcontenttype XML element."""
+    elem = etree.Element(f"{{{NAMESPACE}}}getcontenttype")
+    elem.text = content_type
+    return elem
+
+
+def _create_last_modified(dt: datetime) -> etree.Element:
+    """Create getlastmodified XML element."""
+    from email.utils import format_datetime
+
+    elem = etree.Element(f"{{{NAMESPACE}}}getlastmodified")
+    elem.text = format_datetime(dt, usegmt=True)
     return elem
