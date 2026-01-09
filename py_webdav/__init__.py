@@ -2,6 +2,7 @@
 
 from .client import Client
 from .fs_local import LocalFileSystem
+from .inform_api_client import InformAPIClient, InformConfig
 from .server import Handler, create_app
 from .webdav import (
     ConditionalMatch,
