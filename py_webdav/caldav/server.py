@@ -293,6 +293,22 @@ def _propfind_calendar(
         lambda: _create_supported_components(calendar.supported_component_set)
     )
 
+    # Calendar description
+    if calendar.description:
+        props["{urn:ietf:params:xml:ns:caldav}calendar-description"] = (
+            lambda: _create_calendar_description(calendar.description)
+        )
+
+    # Supported calendar data (iCalendar MIME type)
+    props["{urn:ietf:params:xml:ns:caldav}supported-calendar-data"] = (
+        lambda: _create_supported_calendar_data()
+    )
+
+    # Current user privilege set (read/write)
+    props[f"{{{NAMESPACE}}}current-user-privilege-set"] = (
+        lambda: _create_current_user_privilege_set()
+    )
+
     # Determine which properties to return
     requested_props = []
     if propfind.allprop:
@@ -486,6 +502,42 @@ def _create_last_modified(dt: datetime) -> etree.Element:
 
     elem = etree.Element(f"{{{NAMESPACE}}}getlastmodified")
     elem.text = format_datetime(dt, usegmt=True)
+    return elem
+
+
+def _create_calendar_description(description: str) -> etree.Element:
+    """Create calendar-description XML element."""
+    CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
+    elem = etree.Element(f"{{{CALDAV_NS}}}calendar-description")
+    elem.text = description
+    return elem
+
+
+def _create_supported_calendar_data() -> etree.Element:
+    """Create supported-calendar-data XML element."""
+    CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
+    elem = etree.Element(f"{{{CALDAV_NS}}}supported-calendar-data")
+
+    # Add iCalendar 2.0 support
+    cal_data_type = etree.SubElement(elem, f"{{{CALDAV_NS}}}calendar-data")
+    cal_data_type.set("content-type", "text/calendar")
+    cal_data_type.set("version", "2.0")
+
+    return elem
+
+
+def _create_current_user_privilege_set() -> etree.Element:
+    """Create current-user-privilege-set XML element."""
+    elem = etree.Element(f"{{{NAMESPACE}}}current-user-privilege-set")
+
+    # Add read privilege
+    privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
+    etree.SubElement(privilege, f"{{{NAMESPACE}}}read")
+
+    # Add write privilege
+    privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
+    etree.SubElement(privilege, f"{{{NAMESPACE}}}write")
+
     return elem
 
 

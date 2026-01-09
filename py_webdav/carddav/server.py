@@ -288,6 +288,16 @@ def _propfind_addressbook(
     # Display name
     props[f"{{{NAMESPACE}}}displayname"] = lambda: _create_displayname(addressbook.name)
 
+    # Supported address data (vCard versions)
+    props["{urn:ietf:params:xml:ns:carddav}supported-address-data"] = (
+        lambda: _create_supported_address_data()
+    )
+
+    # Current user privilege set (read/write)
+    props[f"{{{NAMESPACE}}}current-user-privilege-set"] = (
+        lambda: _create_current_user_privilege_set()
+    )
+
     # Determine which properties to return
     requested_props = []
     if propfind.allprop:
@@ -472,6 +482,39 @@ def _create_last_modified(dt: datetime) -> etree.Element:
 
     elem = etree.Element(f"{{{NAMESPACE}}}getlastmodified")
     elem.text = format_datetime(dt, usegmt=True)
+    return elem
+
+
+def _create_supported_address_data() -> etree.Element:
+    """Create supported-address-data XML element."""
+    CARDDAV_NS = "urn:ietf:params:xml:ns:carddav"
+    elem = etree.Element(f"{{{CARDDAV_NS}}}supported-address-data")
+
+    # Add vCard 3.0 support
+    addr_data_type = etree.SubElement(elem, f"{{{CARDDAV_NS}}}address-data-type")
+    addr_data_type.set("content-type", "text/vcard")
+    addr_data_type.set("version", "3.0")
+
+    # Add vCard 4.0 support
+    addr_data_type = etree.SubElement(elem, f"{{{CARDDAV_NS}}}address-data-type")
+    addr_data_type.set("content-type", "text/vcard")
+    addr_data_type.set("version", "4.0")
+
+    return elem
+
+
+def _create_current_user_privilege_set() -> etree.Element:
+    """Create current-user-privilege-set XML element."""
+    elem = etree.Element(f"{{{NAMESPACE}}}current-user-privilege-set")
+
+    # Add read privilege
+    privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
+    etree.SubElement(privilege, f"{{{NAMESPACE}}}read")
+
+    # Add write privilege
+    privilege = etree.SubElement(elem, f"{{{NAMESPACE}}}privilege")
+    etree.SubElement(privilege, f"{{{NAMESPACE}}}write")
+
     return elem
 
 
