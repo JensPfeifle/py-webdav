@@ -485,23 +485,35 @@ class Handler:
             if (
                 request.method == "REPORT"
                 and (request.url.path == self.calendar_home_path or request.url.path.startswith(self.calendar_home_path))
+                and self.caldav_backend is not None
             ):
-                # TODO: Implement calendar-query, calendar-multiget, free-busy-query
-                return StarletteResponse(
-                    content="CalDAV REPORT queries are not yet fully implemented",
-                    status_code=501,  # Not Implemented
-                )
+                from .caldav.server import handle_caldav_report
+
+                try:
+                    return await handle_caldav_report(
+                        request, self.calendar_home_path, self.principal_path, self.caldav_backend
+                    )
+                except HTTPError as e:
+                    return StarletteResponse(content=str(e), status_code=e.code)
+                except Exception as e:
+                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
 
             # Handle REPORT requests for CardDAV paths
             if (
                 request.method == "REPORT"
                 and (request.url.path == self.addressbook_home_path or request.url.path.startswith(self.addressbook_home_path))
+                and self.carddav_backend is not None
             ):
-                # TODO: Implement addressbook-query, addressbook-multiget
-                return StarletteResponse(
-                    content="CardDAV REPORT queries are not yet fully implemented",
-                    status_code=501,  # Not Implemented
-                )
+                from .carddav.server import handle_carddav_report
+
+                try:
+                    return await handle_carddav_report(
+                        request, self.addressbook_home_path, self.principal_path, self.carddav_backend
+                    )
+                except HTTPError as e:
+                    return StarletteResponse(content=str(e), status_code=e.code)
+                except Exception as e:
+                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
 
         return await self.internal_handler.handle(request)
 

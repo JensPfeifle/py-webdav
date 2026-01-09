@@ -487,3 +487,109 @@ def _create_last_modified(dt: datetime) -> etree.Element:
     elem = etree.Element(f"{{{NAMESPACE}}}getlastmodified")
     elem.text = format_datetime(dt, usegmt=True)
     return elem
+
+
+async def handle_caldav_report(
+    request: Request,
+    calendar_home_path: str,
+    principal_path: str,
+    backend,  # CalDAVBackend
+) -> Response:
+    """Handle CalDAV REPORT request.
+
+    Args:
+        request: Starlette request
+        calendar_home_path: Path to calendar home set
+        principal_path: Path to user principal
+        backend: CalDAV backend instance
+
+    Returns:
+        Multi-status response
+    """
+    from .report import CalendarMultigetReport, CalendarQueryReport, parse_calendar_report
+
+    # Parse REPORT request body
+    body = await request.body()
+    root = etree.fromstring(body)
+
+    try:
+        report = parse_calendar_report(root)
+    except ValueError as e:
+        from starlette.responses import Response as StarletteResponse
+
+        return StarletteResponse(content=str(e), status_code=400)
+
+    if isinstance(report, CalendarQueryReport):
+        return await _handle_calendar_query(request, report, calendar_home_path, principal_path, backend)
+    elif isinstance(report, CalendarMultigetReport):
+        return await _handle_calendar_multiget(request, report, calendar_home_path, principal_path, backend)
+    else:
+        from starlette.responses import Response as StarletteResponse
+
+        return StarletteResponse(content="Unknown REPORT type", status_code=400)
+
+
+async def _handle_calendar_query(
+    request: Request,
+    query: CalendarQueryReport,
+    calendar_home_path: str,
+    principal_path: str,
+    backend,  # CalDAVBackend
+) -> Response:
+    """Handle calendar-query REPORT."""
+    from .caldav import CalendarQuery
+
+    # Build CalendarQuery from the parsed report
+    # For now, we'll return all objects (filtering not yet implemented)
+    cal_query = CalendarQuery()
+
+    # Query calendar objects
+    try:
+        objects = await backend.query_calendar_objects(request, request.url.path, cal_query)
+    except Exception:
+        # If query fails, return empty list
+        objects = []
+
+    # Build PropFind from query
+    propfind = PropFind(
+        allprop=query.allprop,
+        propname=query.propname,
+    )
+
+    # Build responses for each object
+    responses = []
+    for obj in objects:
+        resp = _propfind_calendar_object(obj, propfind)
+        responses.append(resp)
+
+    ms = MultiStatus(responses=responses)
+    return serve_multistatus(ms)
+
+
+async def _handle_calendar_multiget(
+    request: Request,
+    multiget: CalendarMultigetReport,
+    calendar_home_path: str,
+    principal_path: str,
+    backend,  # CalDAVBackend
+) -> Response:
+    """Handle calendar-multiget REPORT."""
+    # Build PropFind from multiget
+    propfind = PropFind(
+        allprop=multiget.allprop,
+        propname=multiget.propname,
+    )
+
+    # Fetch each requested href
+    responses = []
+    for href in multiget.hrefs:
+        try:
+            obj = await backend.get_calendar_object(request, href)
+            resp = _propfind_calendar_object(obj, propfind)
+            responses.append(resp)
+        except Exception:
+            # If object not found, skip it
+            continue
+
+    ms = MultiStatus(responses=responses)
+    return serve_multistatus(ms)
