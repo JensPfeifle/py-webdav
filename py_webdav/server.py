@@ -606,6 +606,134 @@ class Handler:
                         await self._log_response(response)
                     return response
 
+            # Handle PUT requests for CalDAV paths (calendar objects)
+            if (
+                request.method == "PUT"
+                and request.url.path.startswith(self.calendar_home_path)
+                and self.caldav_backend is not None
+            ):
+                try:
+                    # Read request body
+                    ical_data = (await request.body()).decode("utf-8")
+
+                    # Parse conditional headers
+                    if_none_match = request.headers.get("if-none-match") == "*"
+                    if_match = request.headers.get("if-match")
+
+                    # Call backend to create/update calendar object
+                    calendar_object = await self.caldav_backend.put_calendar_object(
+                        request, request.url.path, ical_data, if_none_match, if_match
+                    )
+
+                    # Prepare response headers
+                    headers: dict[str, str] = {}
+                    if calendar_object.etag:
+                        headers["ETag"] = f'"{calendar_object.etag}"'
+
+                    # Return 201 Created or 204 No Content based on whether it was created
+                    status_code = 201 if if_none_match else 204
+                    response = StarletteResponse(status_code=status_code, headers=headers)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except HTTPError as e:
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except Exception as e:
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+
+            # Handle DELETE requests for CalDAV paths (calendar objects)
+            if (
+                request.method == "DELETE"
+                and request.url.path.startswith(self.calendar_home_path)
+                and self.caldav_backend is not None
+            ):
+                try:
+                    await self.caldav_backend.delete_calendar_object(request, request.url.path)
+                    response = StarletteResponse(status_code=204)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except HTTPError as e:
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except Exception as e:
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+
+            # Handle PUT requests for CardDAV paths (address objects)
+            if (
+                request.method == "PUT"
+                and request.url.path.startswith(self.addressbook_home_path)
+                and self.carddav_backend is not None
+            ):
+                try:
+                    # Read request body
+                    vcard_data = (await request.body()).decode("utf-8")
+
+                    # Parse conditional headers
+                    if_none_match = request.headers.get("if-none-match") == "*"
+                    if_match = request.headers.get("if-match")
+
+                    # Call backend to create/update address object
+                    address_object = await self.carddav_backend.put_address_object(
+                        request, request.url.path, vcard_data, if_none_match, if_match
+                    )
+
+                    # Prepare response headers
+                    headers: dict[str, str] = {}
+                    if address_object.etag:
+                        headers["ETag"] = f'"{address_object.etag}"'
+
+                    # Return 201 Created or 204 No Content based on whether it was created
+                    status_code = 201 if if_none_match else 204
+                    response = StarletteResponse(status_code=status_code, headers=headers)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except HTTPError as e:
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except Exception as e:
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+
+            # Handle DELETE requests for CardDAV paths (address objects)
+            if (
+                request.method == "DELETE"
+                and request.url.path.startswith(self.addressbook_home_path)
+                and self.carddav_backend is not None
+            ):
+                try:
+                    await self.carddav_backend.delete_address_object(request, request.url.path)
+                    response = StarletteResponse(status_code=204)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except HTTPError as e:
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+                except Exception as e:
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
+
         response = await self.internal_handler.handle(request)
 
         # Log outgoing response if debug is enabled
