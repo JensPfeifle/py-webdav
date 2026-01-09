@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from hashlib import md5
 from pathlib import Path
+from typing import Any
 
 from starlette.requests import Request
 
@@ -20,7 +21,12 @@ class LocalCalDAVBackend:
     Calendar objects (.ics files) are stored within calendar directories.
     """
 
-    def __init__(self, root_dir: Path, home_set_path: str = "/calendars/", principal_path: str = "/principals/current/"):
+    def __init__(
+        self,
+        root_dir: Path,
+        home_set_path: str = "/calendars/",
+        principal_path: str = "/principals/current/",
+    ) -> None:
         """Initialize backend.
 
         Args:
@@ -28,12 +34,12 @@ class LocalCalDAVBackend:
             home_set_path: Calendar home set path
             principal_path: User principal path
         """
-        self.root_dir = Path(root_dir)
-        self.home_set_path = home_set_path
-        self.principal_path = principal_path
+        self.root_dir: Path = Path(root_dir)
+        self.home_set_path: str = home_set_path
+        self.principal_path: str = principal_path
 
         # Ensure calendars directory exists
-        self.calendars_dir = self.root_dir / "calendars"
+        self.calendars_dir: Path = self.root_dir / "calendars"
         self.calendars_dir.mkdir(parents=True, exist_ok=True)
 
     async def calendar_home_set_path(self, request: Request) -> str:
@@ -55,17 +61,17 @@ class LocalCalDAVBackend:
 
     def _read_calendar_metadata(self, calendar_dir: Path) -> Calendar:
         """Read calendar metadata from directory."""
-        metadata_file = calendar_dir / ".metadata.json"
+        metadata_file: Path = calendar_dir / ".metadata.json"
 
         if metadata_file.exists():
             with open(metadata_file) as f:
-                data = json.load(f)
+                data: dict[str, Any] = json.load(f)
             return Calendar(
                 path=f"{self.home_set_path}{calendar_dir.name}/",
-                name=data.get("name", calendar_dir.name),
-                description=data.get("description", ""),
-                max_resource_size=data.get("max_resource_size", 0),
-                supported_component_set=data.get("supported_component_set", ["VEVENT", "VTODO"]),
+                name=str(data.get("name", calendar_dir.name)),
+                description=str(data.get("description", "")),
+                max_resource_size=int(data.get("max_resource_size", 0)),
+                supported_component_set=list(data.get("supported_component_set", ["VEVENT", "VTODO"])),
             )
         else:
             # Default calendar metadata

@@ -6,6 +6,7 @@ import json
 from datetime import datetime, timezone
 from hashlib import md5
 from pathlib import Path
+from typing import Any
 
 from starlette.requests import Request
 
@@ -20,7 +21,12 @@ class LocalCardDAVBackend:
     Address objects (.vcf files) are stored within address book directories.
     """
 
-    def __init__(self, root_dir: Path, home_set_path: str = "/contacts/", principal_path: str = "/principals/current/"):
+    def __init__(
+        self,
+        root_dir: Path,
+        home_set_path: str = "/contacts/",
+        principal_path: str = "/principals/current/",
+    ) -> None:
         """Initialize backend.
 
         Args:
@@ -28,12 +34,12 @@ class LocalCardDAVBackend:
             home_set_path: Address book home set path
             principal_path: User principal path
         """
-        self.root_dir = Path(root_dir)
-        self.home_set_path = home_set_path
-        self.principal_path = principal_path
+        self.root_dir: Path = Path(root_dir)
+        self.home_set_path: str = home_set_path
+        self.principal_path: str = principal_path
 
         # Ensure contacts directory exists
-        self.addressbooks_dir = self.root_dir / "contacts"
+        self.addressbooks_dir: Path = self.root_dir / "contacts"
         self.addressbooks_dir.mkdir(parents=True, exist_ok=True)
 
     async def addressbook_home_set_path(self, request: Request) -> str:
@@ -55,16 +61,16 @@ class LocalCardDAVBackend:
 
     def _read_addressbook_metadata(self, addressbook_dir: Path) -> AddressBook:
         """Read address book metadata from directory."""
-        metadata_file = addressbook_dir / ".metadata.json"
+        metadata_file: Path = addressbook_dir / ".metadata.json"
 
         if metadata_file.exists():
             with open(metadata_file) as f:
-                data = json.load(f)
+                data: dict[str, Any] = json.load(f)
             return AddressBook(
                 path=f"{self.home_set_path}{addressbook_dir.name}/",
-                name=data.get("name", addressbook_dir.name),
-                description=data.get("description", ""),
-                max_resource_size=data.get("max_resource_size", 0),
+                name=str(data.get("name", addressbook_dir.name)),
+                description=str(data.get("description", "")),
+                max_resource_size=int(data.get("max_resource_size", 0)),
             )
         else:
             # Default address book metadata
