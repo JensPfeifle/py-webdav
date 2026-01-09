@@ -99,20 +99,27 @@ class LocalCalDAVBackend:
 
     async def list_calendars(self, request: Request) -> list[Calendar]:
         """List all calendars."""
+        import sys
+        print(f"[DEBUG] list_calendars called, calendars_dir={self.calendars_dir}", file=sys.stderr)
         calendars = []
 
         if not self.calendars_dir.exists():
+            print(f"[DEBUG] calendars_dir does not exist!", file=sys.stderr)
             return calendars
 
         for item in self.calendars_dir.iterdir():
+            print(f"[DEBUG] Found item: {item}, is_dir={item.is_dir()}, name={item.name}", file=sys.stderr)
             if item.is_dir() and not item.name.startswith("."):
                 try:
                     calendar = self._read_calendar_metadata(item)
+                    print(f"[DEBUG] Successfully read calendar: {calendar.name} at {calendar.path}", file=sys.stderr)
                     calendars.append(calendar)
-                except Exception:
+                except Exception as e:
                     # Skip invalid calendars
+                    print(f"[DEBUG] Failed to read calendar {item}: {e}", file=sys.stderr)
                     continue
 
+        print(f"[DEBUG] Returning {len(calendars)} calendars", file=sys.stderr)
         return calendars
 
     async def get_calendar(self, request: Request, path: str) -> Calendar:
