@@ -1,4 +1,5 @@
 """Tests for CalDAV functionality."""
+
 import pytest
 
 from py_webdav.caldav import validate_calendar_object

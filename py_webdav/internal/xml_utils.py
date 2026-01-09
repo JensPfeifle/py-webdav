@@ -10,7 +10,7 @@ from lxml import etree
 class RawXMLValue:
     """Raw XML value that can be marshaled/unmarshaled."""
 
-    def __init__(self, element: etree.Element | None = None, obj: Any | None = None) -> None:
+    def __init__(self, element: etree._Element | None = None, obj: Any | None = None) -> None:
         """Initialize raw XML value.
 
         Args:
@@ -49,7 +49,7 @@ class RawXMLValue:
         # For complex types, would need custom decoding logic
         return self.element
 
-    def encode(self) -> etree.Element:
+    def encode(self) -> etree._Element:
         """Encode the value to XML."""
         if self.element is not None:
             return self.element
@@ -60,7 +60,7 @@ class RawXMLValue:
 
 
 def new_raw_xml_element(
-    tag: str, attrib: dict[str, str] | None = None, children: list[etree.Element] | None = None
+    tag: str, attrib: dict[str, str] | None = None, children: list[etree._Element] | None = None
 ) -> RawXMLValue:
     """Create a new raw XML element.
 

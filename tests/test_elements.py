@@ -1,9 +1,9 @@
 """Tests for internal elements."""
+
 from lxml import etree
 
 from py_webdav.internal.elements import MultiStatus
-from py_webdav.internal.internal import HTTPError, HrefError
-
+from py_webdav.internal.internal import HrefError, HTTPError
 
 # https://tools.ietf.org/html/rfc4918#section-9.6.2
 EXAMPLE_DELETE_MULTISTATUS_STR = """<?xml version="1.0" encoding="utf-8" ?>
