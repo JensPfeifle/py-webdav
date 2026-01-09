@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -11,7 +11,13 @@ from typing import Any
 from starlette.requests import Request
 
 from ..internal import HTTPError
-from .caldav import Calendar, CalendarCompRequest, CalendarObject, CalendarQuery, validate_calendar_object
+from .caldav import (
+    Calendar,
+    CalendarCompRequest,
+    CalendarObject,
+    CalendarQuery,
+    validate_calendar_object,
+)
 
 
 class LocalCalDAVBackend:
@@ -173,7 +179,7 @@ class LocalCalDAVBackend:
 
         # Get file stats
         stat = file_path.stat()
-        mod_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        mod_time = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
 
         # Generate ETag from content
         etag = md5(ical_data.encode()).hexdigest()

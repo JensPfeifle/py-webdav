@@ -20,6 +20,7 @@ from ..internal import (
 from ..internal import Response as WebDAVResponse
 from ..internal.elements import COLLECTION, NAMESPACE
 from ..internal.server import serve_multistatus
+from .report import AddressBookMultigetReport, AddressBookQueryReport
 
 
 class ResourceType(IntEnum):
@@ -578,8 +579,8 @@ async def _handle_addressbook_query(
     backend,  # CardDAVBackend
 ) -> Response:
     """Handle addressbook-query REPORT."""
-    from .carddav import AddressBookQuery
     from ..internal.elements import Prop
+    from .carddav import AddressBookQuery
 
     # Build AddressBookQuery from the parsed report
     # For now, we'll return all objects (filtering not yet implemented)

@@ -82,10 +82,11 @@ Endpoints:
         setup_debug_logging()
 
     # Create WebDAV app with CalDAV/CardDAV support if requested
-    from py_webdav import LocalFileSystem
-    from py_webdav.server import Handler
     from starlette.applications import Starlette
     from starlette.routing import Route
+
+    from py_webdav import LocalFileSystem
+    from py_webdav.server import Handler
 
     filesystem = LocalFileSystem(directory)
 

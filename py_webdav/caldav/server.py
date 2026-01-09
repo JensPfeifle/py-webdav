@@ -20,6 +20,7 @@ from ..internal import (
 from ..internal import Response as WebDAVResponse
 from ..internal.elements import COLLECTION, NAMESPACE
 from ..internal.server import serve_multistatus
+from .report import CalendarMultigetReport, CalendarQueryReport
 
 
 class ResourceType(IntEnum):
@@ -601,12 +602,14 @@ async def _handle_calendar_query(
     backend,  # CalDAVBackend
 ) -> Response:
     """Handle calendar-query REPORT."""
-    from .caldav import CalendarQuery
     from ..internal.elements import Prop
+    from .caldav import CalendarCompRequest, CalendarQuery, CompFilter
 
     # Build CalendarQuery from the parsed report
     # For now, we'll return all objects (filtering not yet implemented)
-    cal_query = CalendarQuery()
+    comp_request = CalendarCompRequest(name="VCALENDAR", allcomps=True)
+    comp_filter = CompFilter(name="VCALENDAR")
+    cal_query = CalendarQuery(comp_request=comp_request, comp_filter=comp_filter)
 
     # Query calendar objects
     try:

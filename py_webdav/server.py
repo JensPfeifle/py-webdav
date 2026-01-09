@@ -413,7 +413,6 @@ class Handler:
 
             # Replace request with one that has cached body
             # This is necessary because request.body() can only be called once
-            from starlette.datastructures import Headers
 
             async def receive():
                 return {"type": "http.request", "body": request_body}
@@ -592,7 +591,6 @@ class Handler:
 
         # Log outgoing response if debug is enabled
         if self.debug:
-            from .debug import log_response
 
             await self._log_response(response)
 

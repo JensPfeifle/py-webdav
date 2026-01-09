@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import md5
 from pathlib import Path
 from typing import Any
@@ -168,7 +168,7 @@ class LocalCardDAVBackend:
 
         # Get file stats
         stat = file_path.stat()
-        mod_time = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+        mod_time = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
 
         # Generate ETag from content
         etag = md5(vcard_data.encode()).hexdigest()
