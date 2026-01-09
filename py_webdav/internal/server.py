@@ -47,7 +47,7 @@ async def is_content_xml(request: Request) -> bool:
     return "application/xml" in content_type or "text/xml" in content_type
 
 
-async def decode_xml_request(request: Request, element_type: type) -> etree.Element:
+async def decode_xml_request(request: Request, element_type: type) -> etree._Element:
     """Decode XML request body."""
     if not await is_content_xml(request):
         raise HTTPError(400, Exception("webdav: expected application/xml request"))
@@ -65,7 +65,7 @@ async def is_request_body_empty(request: Request) -> bool:
     return len(body) == 0
 
 
-def serve_xml(content: etree.Element) -> StarletteResponse:
+def serve_xml(content: etree._Element) -> StarletteResponse:
     """Serve an XML response."""
     # Serialize to bytes with XML declaration
     xml_bytes = etree.tostring(content, encoding="utf-8", xml_declaration=True, pretty_print=True)
@@ -102,11 +102,11 @@ class Backend(Protocol):
         """Handle HEAD/GET request."""
         ...
 
-    async def propfind(self, request: Request, pf: PropFind, depth: Depth) -> MultiStatus:
+    async def propfind(self, request: Request, propfind: PropFind, depth: Depth) -> MultiStatus:
         """Handle PROPFIND request."""
         ...
 
-    async def proppatch(self, request: Request, pu: PropertyUpdate) -> Response:
+    async def proppatch(self, request: Request, update: PropertyUpdate) -> Response:
         """Handle PROPPATCH request."""
         ...
 

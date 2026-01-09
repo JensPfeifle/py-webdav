@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from enum import IntEnum
-from typing import Protocol
 
 from lxml import etree
 from starlette.requests import Request
@@ -20,6 +20,7 @@ from ..internal import (
 from ..internal import Response as WebDAVResponse
 from ..internal.elements import COLLECTION, NAMESPACE
 from ..internal.server import serve_multistatus
+from .backend import CardDAVBackend
 from .report import AddressBookMultigetReport, AddressBookQueryReport
 
 
@@ -31,18 +32,6 @@ class ResourceType(IntEnum):
     ADDRESSBOOK_HOME_SET = 1
     ADDRESSBOOK = 2
     ADDRESS_OBJECT = 3
-
-
-class CardDAVBackend(Protocol):
-    """CardDAV backend interface."""
-
-    async def current_user_principal(self, request: Request) -> str:
-        """Get current user principal path."""
-        ...
-
-    async def addressbook_home_set_path(self, request: Request) -> str:
-        """Get addressbook home set path."""
-        ...
 
 
 def detect_resource_type(path: str, prefix: str = "") -> ResourceType:
@@ -106,7 +95,9 @@ async def handle_carddav_propfind(
             if depth == Depth.ONE and backend is not None:
                 addressbooks = await backend.list_addressbooks(request)
                 for addressbook in addressbooks:
-                    resp = _propfind_addressbook(addressbook, propfind, principal_path, addressbook_home_path)
+                    resp = _propfind_addressbook(
+                        addressbook, propfind, principal_path, addressbook_home_path
+                    )
                     responses.append(resp)
 
     elif resource_type == ResourceType.ADDRESSBOOK:
@@ -114,7 +105,9 @@ async def handle_carddav_propfind(
         if backend is not None:
             try:
                 addressbook = await backend.get_addressbook(request, request.url.path)
-                resp = _propfind_addressbook(addressbook, propfind, principal_path, addressbook_home_path)
+                resp = _propfind_addressbook(
+                    addressbook, propfind, principal_path, addressbook_home_path
+                )
                 responses.append(resp)
 
                 # If depth > 0, list address objects
@@ -148,14 +141,14 @@ def _propfind_addressbook_home_set(
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - collection
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_resource_type_collection()
 
     # Current user principal
-    props[f"{{{NAMESPACE}}}current-user-principal"] = (
-        lambda: _create_current_user_principal(principal_path)
+    props[f"{{{NAMESPACE}}}current-user-principal"] = lambda: _create_current_user_principal(
+        principal_path
     )
 
     # Addressbook home set - self-reference
@@ -202,9 +195,7 @@ def _propfind_addressbook_home_set(
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -226,20 +217,20 @@ def _propfind_addressbook_home_set(
     )
 
 
-def _create_resource_type_collection() -> etree.Element:
+def _create_resource_type_collection() -> etree._Element:
     """Create resourcetype XML element for collection."""
     rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
     etree.SubElement(rt, COLLECTION)
     return rt
 
 
-def _create_current_user_principal(path: str) -> etree.Element:
+def _create_current_user_principal(path: str) -> etree._Element:
     """Create current-user-principal XML element."""
     cup = CurrentUserPrincipal(href=Href.from_string(path))
     return cup.to_xml()
 
 
-def _create_addressbook_home_set(path: str) -> etree.Element:
+def _create_addressbook_home_set(path: str) -> etree._Element:
     """Create addressbook-home-set XML element."""
     elem = etree.Element("{urn:ietf:params:xml:ns:carddav}addressbook-home-set")
     href = etree.SubElement(elem, f"{{{NAMESPACE}}}href")
@@ -247,7 +238,7 @@ def _create_addressbook_home_set(path: str) -> etree.Element:
     return elem
 
 
-def _create_displayname(name: str) -> etree.Element:
+def _create_displayname(name: str) -> etree._Element:
     """Create displayname XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}displayname")
     elem.text = name
@@ -271,14 +262,14 @@ def _propfind_addressbook(
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - collection with addressbook
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_addressbook_resourcetype()
 
     # Current user principal
-    props[f"{{{NAMESPACE}}}current-user-principal"] = (
-        lambda: _create_current_user_principal(principal_path)
+    props[f"{{{NAMESPACE}}}current-user-principal"] = lambda: _create_current_user_principal(
+        principal_path
     )
 
     # Addressbook home set
@@ -334,9 +325,7 @@ def _propfind_addressbook(
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -371,7 +360,7 @@ def _propfind_address_object(obj, propfind: PropFind) -> WebDAVResponse:
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - empty for non-collections
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: etree.Element(f"{{{NAMESPACE}}}resourcetype")
@@ -428,9 +417,7 @@ def _propfind_address_object(obj, propfind: PropFind) -> WebDAVResponse:
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -452,7 +439,7 @@ def _propfind_address_object(obj, propfind: PropFind) -> WebDAVResponse:
     )
 
 
-def _create_addressbook_resourcetype() -> etree.Element:
+def _create_addressbook_resourcetype() -> etree._Element:
     """Create resourcetype XML element for addressbook."""
     rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
     etree.SubElement(rt, COLLECTION)
@@ -460,28 +447,28 @@ def _create_addressbook_resourcetype() -> etree.Element:
     return rt
 
 
-def _create_etag(etag: str) -> etree.Element:
+def _create_etag(etag: str) -> etree._Element:
     """Create getetag XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getetag")
     elem.text = f'"{etag}"'
     return elem
 
 
-def _create_content_length(length: int) -> etree.Element:
+def _create_content_length(length: int) -> etree._Element:
     """Create getcontentlength XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getcontentlength")
     elem.text = str(length)
     return elem
 
 
-def _create_content_type(content_type: str) -> etree.Element:
+def _create_content_type(content_type: str) -> etree._Element:
     """Create getcontenttype XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getcontenttype")
     elem.text = content_type
     return elem
 
 
-def _create_last_modified(dt: datetime) -> etree.Element:
+def _create_last_modified(dt: datetime) -> etree._Element:
     """Create getlastmodified XML element."""
     from email.utils import format_datetime
 
@@ -490,7 +477,7 @@ def _create_last_modified(dt: datetime) -> etree.Element:
     return elem
 
 
-def _create_supported_address_data() -> etree.Element:
+def _create_supported_address_data() -> etree._Element:
     """Create supported-address-data XML element."""
     CARDDAV_NS = "urn:ietf:params:xml:ns:carddav"
     elem = etree.Element(f"{{{CARDDAV_NS}}}supported-address-data")
@@ -508,7 +495,7 @@ def _create_supported_address_data() -> etree.Element:
     return elem
 
 
-def _create_current_user_privilege_set() -> etree.Element:
+def _create_current_user_privilege_set() -> etree._Element:
     """Create current-user-privilege-set XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}current-user-privilege-set")
 
@@ -523,7 +510,7 @@ def _create_current_user_privilege_set() -> etree.Element:
     return elem
 
 
-def _create_address_data(vcard_data: str) -> etree.Element:
+def _create_address_data(vcard_data: str) -> etree._Element:
     """Create address-data XML element with vCard content."""
     CARDDAV_NS = "urn:ietf:params:xml:ns:carddav"
     elem = etree.Element(f"{{{CARDDAV_NS}}}address-data")
@@ -562,9 +549,13 @@ async def handle_carddav_report(
         return StarletteResponse(content=str(e), status_code=400)
 
     if isinstance(report, AddressBookQueryReport):
-        return await _handle_addressbook_query(request, report, addressbook_home_path, principal_path, backend)
+        return await _handle_addressbook_query(
+            request, report, addressbook_home_path, principal_path, backend
+        )
     elif isinstance(report, AddressBookMultigetReport):
-        return await _handle_addressbook_multiget(request, report, addressbook_home_path, principal_path, backend)
+        return await _handle_addressbook_multiget(
+            request, report, addressbook_home_path, principal_path, backend
+        )
     else:
         from starlette.responses import Response as StarletteResponse
 

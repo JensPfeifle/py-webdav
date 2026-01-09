@@ -31,7 +31,7 @@ def format_xml(xml_bytes: bytes | str) -> str:
         # If parsing fails, return as-is
         if isinstance(xml_bytes, bytes):
             return xml_bytes.decode("utf-8", errors="replace")
-        return xml_bytes
+        return str(xml_bytes)
 
 
 def is_xml_content(content_type: str | None) -> bool:

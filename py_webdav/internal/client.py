@@ -166,7 +166,7 @@ class Client:
         return resp
 
     async def xml_request(
-        self, method: str, path: str, xml_obj: etree.Element, headers: dict[str, str] | None = None
+        self, method: str, path: str, xml_obj: etree._Element, headers: dict[str, str] | None = None
     ) -> httpx.Response:
         """Make an XML HTTP request.
 
@@ -189,7 +189,7 @@ class Client:
 
         return await self.request(method, path, content=xml_bytes, headers=req_headers)
 
-    async def do_multistatus(self, method: str, path: str, xml_obj: etree.Element) -> MultiStatus:
+    async def do_multistatus(self, method: str, path: str, xml_obj: etree._Element) -> MultiStatus:
         """Perform a request expecting a multistatus response.
 
         Args:

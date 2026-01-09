@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from enum import IntEnum
-from typing import Protocol
 
 from lxml import etree
 from starlette.requests import Request
@@ -20,6 +20,7 @@ from ..internal import (
 from ..internal import Response as WebDAVResponse
 from ..internal.elements import COLLECTION, NAMESPACE
 from ..internal.server import serve_multistatus
+from .backend import CalDAVBackend
 from .report import CalendarMultigetReport, CalendarQueryReport
 
 
@@ -31,18 +32,6 @@ class ResourceType(IntEnum):
     CALENDAR_HOME_SET = 1
     CALENDAR = 2
     CALENDAR_OBJECT = 3
-
-
-class CalDAVBackend(Protocol):
-    """CalDAV backend interface."""
-
-    async def current_user_principal(self, request: Request) -> str:
-        """Get current user principal path."""
-        ...
-
-    async def calendar_home_set_path(self, request: Request) -> str:
-        """Get calendar home set path."""
-        ...
 
 
 def detect_resource_type(path: str, prefix: str = "") -> ResourceType:
@@ -106,7 +95,9 @@ async def handle_caldav_propfind(
             if depth == Depth.ONE and backend is not None:
                 calendars = await backend.list_calendars(request)
                 for calendar in calendars:
-                    resp = _propfind_calendar(calendar, propfind, principal_path, calendar_home_path)
+                    resp = _propfind_calendar(
+                        calendar, propfind, principal_path, calendar_home_path
+                    )
                     responses.append(resp)
 
     elif resource_type == ResourceType.CALENDAR:
@@ -148,19 +139,19 @@ def _propfind_calendar_home_set(
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - collection
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_resource_type_collection()
 
     # Current user principal
-    props[f"{{{NAMESPACE}}}current-user-principal"] = (
-        lambda: _create_current_user_principal(principal_path)
+    props[f"{{{NAMESPACE}}}current-user-principal"] = lambda: _create_current_user_principal(
+        principal_path
     )
 
     # Calendar home set - self-reference
-    props["{urn:ietf:params:xml:ns:caldav}calendar-home-set"] = (
-        lambda: _create_calendar_home_set(home_set_path)
+    props["{urn:ietf:params:xml:ns:caldav}calendar-home-set"] = lambda: _create_calendar_home_set(
+        home_set_path
     )
 
     # Display name
@@ -202,9 +193,7 @@ def _propfind_calendar_home_set(
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -226,20 +215,20 @@ def _propfind_calendar_home_set(
     )
 
 
-def _create_resource_type_collection() -> etree.Element:
+def _create_resource_type_collection() -> etree._Element:
     """Create resourcetype XML element for collection."""
     rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
     etree.SubElement(rt, COLLECTION)
     return rt
 
 
-def _create_current_user_principal(path: str) -> etree.Element:
+def _create_current_user_principal(path: str) -> etree._Element:
     """Create current-user-principal XML element."""
     cup = CurrentUserPrincipal(href=Href.from_string(path))
     return cup.to_xml()
 
 
-def _create_calendar_home_set(path: str) -> etree.Element:
+def _create_calendar_home_set(path: str) -> etree._Element:
     """Create calendar-home-set XML element."""
     elem = etree.Element("{urn:ietf:params:xml:ns:caldav}calendar-home-set")
     href = etree.SubElement(elem, f"{{{NAMESPACE}}}href")
@@ -247,7 +236,7 @@ def _create_calendar_home_set(path: str) -> etree.Element:
     return elem
 
 
-def _create_displayname(name: str) -> etree.Element:
+def _create_displayname(name: str) -> etree._Element:
     """Create displayname XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}displayname")
     elem.text = name
@@ -271,19 +260,19 @@ def _propfind_calendar(
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - collection with calendar
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_calendar_resourcetype()
 
     # Current user principal
-    props[f"{{{NAMESPACE}}}current-user-principal"] = (
-        lambda: _create_current_user_principal(principal_path)
+    props[f"{{{NAMESPACE}}}current-user-principal"] = lambda: _create_current_user_principal(
+        principal_path
     )
 
     # Calendar home set
-    props["{urn:ietf:params:xml:ns:caldav}calendar-home-set"] = (
-        lambda: _create_calendar_home_set(home_set_path)
+    props["{urn:ietf:params:xml:ns:caldav}calendar-home-set"] = lambda: _create_calendar_home_set(
+        home_set_path
     )
 
     # Display name
@@ -345,9 +334,7 @@ def _propfind_calendar(
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -382,7 +369,7 @@ def _propfind_calendar_object(obj, propfind: PropFind) -> WebDAVResponse:
     from ..internal.elements import Prop, PropStat, Status
 
     # Build property functions
-    props: dict[str, callable] = {}
+    props: dict[str, Callable] = {}
 
     # Resource type - empty for non-collections
     props[f"{{{NAMESPACE}}}resourcetype"] = lambda: etree.Element(f"{{{NAMESPACE}}}resourcetype")
@@ -439,9 +426,7 @@ def _propfind_calendar_object(obj, propfind: PropFind) -> WebDAVResponse:
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:
@@ -463,7 +448,7 @@ def _propfind_calendar_object(obj, propfind: PropFind) -> WebDAVResponse:
     )
 
 
-def _create_calendar_resourcetype() -> etree.Element:
+def _create_calendar_resourcetype() -> etree._Element:
     """Create resourcetype XML element for calendar."""
     rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
     etree.SubElement(rt, COLLECTION)
@@ -471,7 +456,7 @@ def _create_calendar_resourcetype() -> etree.Element:
     return rt
 
 
-def _create_supported_components(components: list[str]) -> etree.Element:
+def _create_supported_components(components: list[str]) -> etree._Element:
     """Create supported-calendar-component-set XML element."""
     elem = etree.Element("{urn:ietf:params:xml:ns:caldav}supported-calendar-component-set")
     for comp in components:
@@ -480,28 +465,28 @@ def _create_supported_components(components: list[str]) -> etree.Element:
     return elem
 
 
-def _create_etag(etag: str) -> etree.Element:
+def _create_etag(etag: str) -> etree._Element:
     """Create getetag XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getetag")
     elem.text = f'"{etag}"'
     return elem
 
 
-def _create_content_length(length: int) -> etree.Element:
+def _create_content_length(length: int) -> etree._Element:
     """Create getcontentlength XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getcontentlength")
     elem.text = str(length)
     return elem
 
 
-def _create_content_type(content_type: str) -> etree.Element:
+def _create_content_type(content_type: str) -> etree._Element:
     """Create getcontenttype XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}getcontenttype")
     elem.text = content_type
     return elem
 
 
-def _create_last_modified(dt: datetime) -> etree.Element:
+def _create_last_modified(dt: datetime) -> etree._Element:
     """Create getlastmodified XML element."""
     from email.utils import format_datetime
 
@@ -510,7 +495,7 @@ def _create_last_modified(dt: datetime) -> etree.Element:
     return elem
 
 
-def _create_calendar_description(description: str) -> etree.Element:
+def _create_calendar_description(description: str) -> etree._Element:
     """Create calendar-description XML element."""
     CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
     elem = etree.Element(f"{{{CALDAV_NS}}}calendar-description")
@@ -518,7 +503,7 @@ def _create_calendar_description(description: str) -> etree.Element:
     return elem
 
 
-def _create_supported_calendar_data() -> etree.Element:
+def _create_supported_calendar_data() -> etree._Element:
     """Create supported-calendar-data XML element."""
     CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
     elem = etree.Element(f"{{{CALDAV_NS}}}supported-calendar-data")
@@ -531,7 +516,7 @@ def _create_supported_calendar_data() -> etree.Element:
     return elem
 
 
-def _create_current_user_privilege_set() -> etree.Element:
+def _create_current_user_privilege_set() -> etree._Element:
     """Create current-user-privilege-set XML element."""
     elem = etree.Element(f"{{{NAMESPACE}}}current-user-privilege-set")
 
@@ -546,7 +531,7 @@ def _create_current_user_privilege_set() -> etree.Element:
     return elem
 
 
-def _create_calendar_data(ical_data: str) -> etree.Element:
+def _create_calendar_data(ical_data: str) -> etree._Element:
     """Create calendar-data XML element with iCalendar content."""
     CALDAV_NS = "urn:ietf:params:xml:ns:caldav"
     elem = etree.Element(f"{{{CALDAV_NS}}}calendar-data")
@@ -585,9 +570,13 @@ async def handle_caldav_report(
         return StarletteResponse(content=str(e), status_code=400)
 
     if isinstance(report, CalendarQueryReport):
-        return await _handle_calendar_query(request, report, calendar_home_path, principal_path, backend)
+        return await _handle_calendar_query(
+            request, report, calendar_home_path, principal_path, backend
+        )
     elif isinstance(report, CalendarMultigetReport):
-        return await _handle_calendar_multiget(request, report, calendar_home_path, principal_path, backend)
+        return await _handle_calendar_multiget(
+            request, report, calendar_home_path, principal_path, backend
+        )
     else:
         from starlette.responses import Response as StarletteResponse
 

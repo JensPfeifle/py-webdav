@@ -88,7 +88,7 @@ class MultiStatus:
     response_description: str = ""
     sync_token: str = ""
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         root = etree.Element(f"{{{NAMESPACE}}}multistatus")
         for resp in self.responses:
@@ -102,17 +102,17 @@ class MultiStatus:
         return root
 
     @staticmethod
-    def from_xml(element: etree.Element) -> MultiStatus:
+    def from_xml(element: etree._Element) -> MultiStatus:
         """Parse from XML element."""
         responses = []
         for resp_el in element.findall(f"{{{NAMESPACE}}}response"):
             responses.append(Response.from_xml(resp_el))
 
         response_desc_el = element.find(f"{{{NAMESPACE}}}responsedescription")
-        response_desc = response_desc_el.text if response_desc_el is not None else ""
+        response_desc = (response_desc_el.text if response_desc_el is not None else "") or ""
 
         sync_token_el = element.find(f"{{{NAMESPACE}}}sync-token")
-        sync_token = sync_token_el.text if sync_token_el is not None else ""
+        sync_token = (sync_token_el.text if sync_token_el is not None else "") or ""
 
         return MultiStatus(
             responses=responses,
@@ -127,7 +127,7 @@ class Location:
 
     href: Href
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         loc = etree.Element(f"{{{NAMESPACE}}}location")
         href_el = etree.SubElement(loc, f"{{{NAMESPACE}}}href")
@@ -139,7 +139,7 @@ class Location:
 class Error:
     """WebDAV error element."""
 
-    raw: list[etree.Element] = field(default_factory=list)
+    raw: list[etree._Element] = field(default_factory=list)
 
     def __str__(self) -> str:
         if self.raw:
@@ -156,7 +156,7 @@ class PropStat:
     response_description: str = ""
     error: Error | None = None
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         propstat = etree.Element(f"{{{NAMESPACE}}}propstat")
         propstat.append(self.prop.to_xml())
@@ -171,17 +171,17 @@ class PropStat:
         return propstat
 
     @staticmethod
-    def from_xml(element: etree.Element) -> PropStat:
+    def from_xml(element: etree._Element) -> PropStat:
         """Parse from XML element."""
         prop_el = element.find(f"{{{NAMESPACE}}}prop")
         prop = Prop.from_xml(prop_el) if prop_el is not None else Prop()
 
         status_el = element.find(f"{{{NAMESPACE}}}status")
         status_text = status_el.text if status_el is not None else ""
-        status = Status.from_string(status_text)
+        status = Status.from_string(str(status_text))
 
         desc_el = element.find(f"{{{NAMESPACE}}}responsedescription")
-        desc = desc_el.text if desc_el is not None else ""
+        desc = (desc_el.text if desc_el is not None else "") or ""
 
         return PropStat(prop=prop, status=status, response_description=desc)
 
@@ -190,9 +190,9 @@ class PropStat:
 class Prop:
     """WebDAV prop element."""
 
-    raw: list[etree.Element] = field(default_factory=list)
+    raw: list[etree._Element] = field(default_factory=list)
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         prop = etree.Element(f"{{{NAMESPACE}}}prop")
         for elem in self.raw:
@@ -200,11 +200,11 @@ class Prop:
         return prop
 
     @staticmethod
-    def from_xml(element: etree.Element) -> Prop:
+    def from_xml(element: etree._Element) -> Prop:
         """Parse from XML element."""
         return Prop(raw=list(element))
 
-    def get(self, tag: str) -> etree.Element | None:
+    def get(self, tag: str) -> etree._Element | None:
         """Get a property by tag name."""
         for elem in self.raw:
             if elem.tag == tag:
@@ -223,7 +223,7 @@ class Response:
     error: Error | None = None
     location: Location | None = None
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         resp = etree.Element(f"{{{NAMESPACE}}}response")
 
@@ -245,7 +245,7 @@ class Response:
         return resp
 
     @staticmethod
-    def from_xml(element: etree.Element) -> Response:
+    def from_xml(element: etree._Element) -> Response:
         """Parse from XML element."""
         hrefs = []
         for href_el in element.findall(f"{{{NAMESPACE}}}href"):
@@ -257,7 +257,7 @@ class Response:
             propstats.append(PropStat.from_xml(ps_el))
 
         desc_el = element.find(f"{{{NAMESPACE}}}responsedescription")
-        desc = desc_el.text if desc_el is not None else ""
+        desc = (desc_el.text if desc_el is not None else "") or ""
 
         status_el = element.find(f"{{{NAMESPACE}}}status")
         status = None
@@ -349,7 +349,7 @@ class PropFind:
     propname: bool = False
 
     @staticmethod
-    def from_xml(element: etree.Element) -> PropFind:
+    def from_xml(element: etree._Element) -> PropFind:
         """Parse from XML element."""
         prop_el = element.find(f"{{{NAMESPACE}}}prop")
         prop = Prop.from_xml(prop_el) if prop_el is not None else None
@@ -365,7 +365,7 @@ class PropFind:
 
         return PropFind(prop=prop, allprop=allprop, include=include, propname=propname)
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         pf = etree.Element(f"{{{NAMESPACE}}}propfind")
 
@@ -393,7 +393,7 @@ class ResourceType:
         """Check if resource has a specific type."""
         return tag in self.types
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
         for t in self.types:
@@ -401,7 +401,7 @@ class ResourceType:
         return rt
 
     @staticmethod
-    def from_xml(element: etree.Element) -> ResourceType:
+    def from_xml(element: etree._Element) -> ResourceType:
         """Parse from XML element."""
         types = [child.tag for child in element]
         return ResourceType(types=types)
@@ -415,7 +415,7 @@ class PropertyUpdate:
     set_props: list[Prop] = field(default_factory=list)
 
     @staticmethod
-    def from_xml(element: etree.Element) -> PropertyUpdate:
+    def from_xml(element: etree._Element) -> PropertyUpdate:
         """Parse from XML element."""
         remove_props: list[Prop] = []
         for rem_el in element.findall(f"{{{NAMESPACE}}}remove"):
@@ -442,7 +442,7 @@ class SyncCollectionQuery:
     prop: Prop | None = None
 
     @staticmethod
-    def from_xml(element: etree.Element) -> SyncCollectionQuery:
+    def from_xml(element: etree._Element) -> SyncCollectionQuery:
         """Parse from XML element."""
         token_el = element.find(f"{{{NAMESPACE}}}sync-token")
         sync_token = token_el.text if token_el is not None and token_el.text else ""
@@ -467,7 +467,7 @@ class DisplayName:
 
     name: str
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}displayname")
         elem.text = self.name
@@ -480,7 +480,7 @@ class GetContentLength:
 
     length: int
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}getcontentlength")
         elem.text = str(self.length)
@@ -493,7 +493,7 @@ class GetContentType:
 
     content_type: str
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}getcontenttype")
         elem.text = self.content_type
@@ -506,7 +506,7 @@ class GetLastModified:
 
     last_modified: datetime
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}getlastmodified")
         # Use RFC 1123 format (HTTP date format)
@@ -520,7 +520,7 @@ class GetETag:
 
     etag: str
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}getetag")
         # ETags should be quoted
@@ -535,7 +535,7 @@ class CurrentUserPrincipal:
     href: Href | None = None
     unauthenticated: bool = False
 
-    def to_xml(self) -> etree.Element:
+    def to_xml(self) -> etree._Element:
         """Convert to XML element."""
         elem = etree.Element(f"{{{NAMESPACE}}}current-user-principal")
         if self.unauthenticated:

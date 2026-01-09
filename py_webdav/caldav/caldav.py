@@ -162,7 +162,10 @@ def validate_calendar_object(ical_data: str) -> tuple[str, str]:
 
             # Check for conflicting event types
             if not event_type:
-                event_type = comp_name
+                if comp_name is None:
+                    raise ValueError("Event type is None")
+                else:
+                    event_type = comp_name
             elif event_type != comp_name:
                 raise ValueError(f"conflicting event types in calendar: {event_type}, {comp_name}")
 

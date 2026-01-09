@@ -161,7 +161,7 @@ class WebDAVBackend:
         from .internal.elements import Href
 
         # Build properties
-        props: dict[str, etree.Element] = {}
+        props: dict[str, etree._Element] = {}
 
         # Resource type
         if fi.is_dir:
@@ -212,8 +212,8 @@ class WebDAVBackend:
             )
         elif propfind.prop:
             # Return requested properties
-            ok_props: list[etree.Element] = []
-            notfound_props: list[etree.Element] = []
+            ok_props: list[etree._Element] = []
+            notfound_props: list[etree._Element] = []
 
             for req_elem in propfind.prop.raw:
                 tag = req_elem.tag
@@ -251,7 +251,7 @@ class WebDAVBackend:
         propstats: list[PropStat] = []
 
         # All property updates are forbidden (not supported)
-        forbidden_props: list[etree.Element] = []
+        forbidden_props: list[etree._Element] = []
 
         for prop in update.set_props:
             forbidden_props.extend(prop.raw)
@@ -460,9 +460,9 @@ class Handler:
                 return response
 
             # Check if this is a CalDAV path request (home set or calendars within it)
-            if (
-                request.method == "PROPFIND"
-                and (request.url.path == self.calendar_home_path or request.url.path.startswith(self.calendar_home_path))
+            if request.method == "PROPFIND" and (
+                request.url.path == self.calendar_home_path
+                or request.url.path.startswith(self.calendar_home_path)
             ):
                 from .caldav.server import handle_caldav_propfind
                 from .internal import parse_depth
@@ -481,7 +481,12 @@ class Handler:
                     depth = parse_depth(depth_str)
 
                     response = await handle_caldav_propfind(
-                        request, propfind, depth, self.calendar_home_path, self.principal_path, self.caldav_backend
+                        request,
+                        propfind,
+                        depth,
+                        self.calendar_home_path,
+                        self.principal_path,
+                        self.caldav_backend,
                     )
                     if self.debug:
                         await self._log_response(response)
@@ -498,9 +503,9 @@ class Handler:
                     return response
 
             # Check if this is a CardDAV path request (home set or addressbooks within it)
-            if (
-                request.method == "PROPFIND"
-                and (request.url.path == self.addressbook_home_path or request.url.path.startswith(self.addressbook_home_path))
+            if request.method == "PROPFIND" and (
+                request.url.path == self.addressbook_home_path
+                or request.url.path.startswith(self.addressbook_home_path)
             ):
                 from .carddav.server import handle_carddav_propfind
                 from .internal import parse_depth
@@ -519,7 +524,12 @@ class Handler:
                     depth = parse_depth(depth_str)
 
                     response = await handle_carddav_propfind(
-                        request, propfind, depth, self.addressbook_home_path, self.principal_path, self.carddav_backend
+                        request,
+                        propfind,
+                        depth,
+                        self.addressbook_home_path,
+                        self.principal_path,
+                        self.carddav_backend,
                     )
                     if self.debug:
                         await self._log_response(response)
@@ -538,7 +548,10 @@ class Handler:
             # Handle REPORT requests for CalDAV paths
             if (
                 request.method == "REPORT"
-                and (request.url.path == self.calendar_home_path or request.url.path.startswith(self.calendar_home_path))
+                and (
+                    request.url.path == self.calendar_home_path
+                    or request.url.path.startswith(self.calendar_home_path)
+                )
                 and self.caldav_backend is not None
             ):
                 from .caldav.server import handle_caldav_report
@@ -564,14 +577,20 @@ class Handler:
             # Handle REPORT requests for CardDAV paths
             if (
                 request.method == "REPORT"
-                and (request.url.path == self.addressbook_home_path or request.url.path.startswith(self.addressbook_home_path))
+                and (
+                    request.url.path == self.addressbook_home_path
+                    or request.url.path.startswith(self.addressbook_home_path)
+                )
                 and self.carddav_backend is not None
             ):
                 from .carddav.server import handle_carddav_report
 
                 try:
                     response = await handle_carddav_report(
-                        request, self.addressbook_home_path, self.principal_path, self.carddav_backend
+                        request,
+                        self.addressbook_home_path,
+                        self.principal_path,
+                        self.carddav_backend,
                     )
                     if self.debug:
                         await self._log_response(response)
@@ -591,7 +610,6 @@ class Handler:
 
         # Log outgoing response if debug is enabled
         if self.debug:
-
             await self._log_response(response)
 
         return response

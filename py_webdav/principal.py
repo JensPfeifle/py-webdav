@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from lxml import etree
@@ -81,26 +82,26 @@ async def _handle_principal_propfind(request: Request, options: PrincipalOptions
             propfind = PropFind.from_xml(xml_elem)
 
         # Build property functions
-        props: dict[str, callable] = {}
+        props: dict[str, Callable] = {}
 
         # Resource type - this is a principal
         props[f"{{{NAMESPACE}}}resourcetype"] = lambda: _create_resource_type_principal()
 
         # Current user principal - self-reference
-        props[f"{{{NAMESPACE}}}current-user-principal"] = (
-            lambda: _create_current_user_principal(options.current_user_principal_path)
+        props[f"{{{NAMESPACE}}}current-user-principal"] = lambda: _create_current_user_principal(
+            options.current_user_principal_path
         )
 
         # Calendar home set (if configured)
         if options.calendar_home_set_path:
             props["{urn:ietf:params:xml:ns:caldav}calendar-home-set"] = (
-                lambda: _create_calendar_home_set(options.calendar_home_set_path)
+                lambda: _create_calendar_home_set(str(options.calendar_home_set_path))
             )
 
         # Addressbook home set (if configured)
         if options.addressbook_home_set_path:
             props["{urn:ietf:params:xml:ns:carddav}addressbook-home-set"] = (
-                lambda: _create_addressbook_home_set(options.addressbook_home_set_path)
+                lambda: _create_addressbook_home_set(str(options.addressbook_home_set_path))
             )
 
         # Create response
@@ -115,7 +116,7 @@ async def _handle_principal_propfind(request: Request, options: PrincipalOptions
         return Response(content=f"Internal error: {e}", status_code=500)
 
 
-def _create_resource_type_principal() -> etree.Element:
+def _create_resource_type_principal() -> etree._Element:
     """Create resourcetype XML element for principal."""
     rt = etree.Element(f"{{{NAMESPACE}}}resourcetype")
     etree.SubElement(rt, COLLECTION)
@@ -123,13 +124,13 @@ def _create_resource_type_principal() -> etree.Element:
     return rt
 
 
-def _create_current_user_principal(path: str) -> etree.Element:
+def _create_current_user_principal(path: str) -> etree._Element:
     """Create current-user-principal XML element."""
     cup = CurrentUserPrincipal(href=Href.from_string(path))
     return cup.to_xml()
 
 
-def _create_calendar_home_set(path: str) -> etree.Element:
+def _create_calendar_home_set(path: str) -> etree._Element:
     """Create calendar-home-set XML element."""
     elem = etree.Element("{urn:ietf:params:xml:ns:caldav}calendar-home-set")
     href = etree.SubElement(elem, f"{{{NAMESPACE}}}href")
@@ -137,7 +138,7 @@ def _create_calendar_home_set(path: str) -> etree.Element:
     return elem
 
 
-def _create_addressbook_home_set(path: str) -> etree.Element:
+def _create_addressbook_home_set(path: str) -> etree._Element:
     """Create addressbook-home-set XML element."""
     elem = etree.Element("{urn:ietf:params:xml:ns:carddav}addressbook-home-set")
     href = etree.SubElement(elem, f"{{{NAMESPACE}}}href")
@@ -146,7 +147,7 @@ def _create_addressbook_home_set(path: str) -> etree.Element:
 
 
 def _create_propfind_response(
-    href: str, propfind: PropFind, props: dict[str, callable]
+    href: str, propfind: PropFind, props: dict[str, Callable]
 ) -> WebDAVResponse:
     """Create a PROPFIND response.
 
@@ -194,9 +195,7 @@ def _create_propfind_response(
 
     if found_props:
         prop = Prop(raw=found_props)
-        propstat = PropStat(
-            prop=prop, status=Status(code=200, text="OK"), response_description=""
-        )
+        propstat = PropStat(prop=prop, status=Status(code=200, text="OK"), response_description="")
         propstats.append(propstat)
 
     if not_found_props:

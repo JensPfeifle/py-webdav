@@ -77,7 +77,9 @@ class LocalCalDAVBackend:
                 name=str(data.get("name", calendar_dir.name)),
                 description=str(data.get("description", "")),
                 max_resource_size=int(data.get("max_resource_size", 0)),
-                supported_component_set=list(data.get("supported_component_set", ["VEVENT", "VTODO"])),
+                supported_component_set=list(
+                    data.get("supported_component_set", ["VEVENT", "VTODO"])
+                ),
             )
         else:
             # Default calendar metadata
@@ -105,7 +107,7 @@ class LocalCalDAVBackend:
 
     async def list_calendars(self, request: Request) -> list[Calendar]:
         """List all calendars."""
-        calendars = []
+        calendars: list[Calendar] = []
 
         if not self.calendars_dir.exists():
             return calendars
