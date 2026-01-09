@@ -1,0 +1,14 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:bob-johnson-001@example.com
+FN:Bob Johnson
+N:Johnson;Bob;;;
+EMAIL;TYPE=INTERNET:bob.johnson@email.com
+TEL;TYPE=CELL:+1-555-0300
+ORG:Freelance Design
+TITLE:Graphic Designer
+URL:https://bobjohnson.design
+NOTE:Met at design conference 2024
+CATEGORIES:Work,Design
+REV:2025-01-09T12:00:00Z
+END:VCARD

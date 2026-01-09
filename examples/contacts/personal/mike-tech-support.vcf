@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:3.0
+UID:mike-tech-001@example.com
+FN:Mike - Tech Support
+N:;;;
+EMAIL;TYPE=INTERNET:mike@techsupport.com
+TEL;TYPE=WORK:+1-555-0500
+ORG:Quick Tech Support Inc
+TITLE:Senior Technician
+NOTE:Go-to person for computer issues
+CATEGORIES:Services,Tech
+REV:2025-01-09T12:00:00Z
+END:VCARD
