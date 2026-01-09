@@ -10,7 +10,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "py_webdav.cmd.server",
-            "args": ["--addr", "100.104.140.52", "--port", "8088", "--carddav", "--debug"],
+            "args": ["--addr", "100.104.140.52", "--port", "8088", "--carddav", "--caldav", "--debug"],
             "envFile": "${workspaceFolder}/.secrets"
         }
     ]
