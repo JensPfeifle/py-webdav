@@ -481,6 +481,28 @@ class Handler:
                 except Exception as e:
                     return StarletteResponse(content=f"Internal error: {e}", status_code=500)
 
+            # Handle REPORT requests for CalDAV paths
+            if (
+                request.method == "REPORT"
+                and (request.url.path == self.calendar_home_path or request.url.path.startswith(self.calendar_home_path))
+            ):
+                # TODO: Implement calendar-query, calendar-multiget, free-busy-query
+                return StarletteResponse(
+                    content="CalDAV REPORT queries are not yet fully implemented",
+                    status_code=501,  # Not Implemented
+                )
+
+            # Handle REPORT requests for CardDAV paths
+            if (
+                request.method == "REPORT"
+                and (request.url.path == self.addressbook_home_path or request.url.path.startswith(self.addressbook_home_path))
+            ):
+                # TODO: Implement addressbook-query, addressbook-multiget
+                return StarletteResponse(
+                    content="CardDAV REPORT queries are not yet fully implemented",
+                    status_code=501,  # Not Implemented
+                )
+
         return await self.internal_handler.handle(request)
 
 
@@ -514,6 +536,7 @@ def create_app(filesystem: FileSystem) -> Starlette:
                 "MKCOL",
                 "COPY",
                 "MOVE",
+                "REPORT",
             ],
         ),
     ]

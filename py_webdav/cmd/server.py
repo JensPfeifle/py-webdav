@@ -108,7 +108,7 @@ Endpoints:
             Route(
                 "/{path:path}",
                 webdav_handler,
-                methods=["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE"],
+                methods=["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "REPORT"],
             ),
         ]
     )
