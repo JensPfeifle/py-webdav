@@ -12,8 +12,15 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
+import os
 
 import httpx
+
+INFORM_CLIENT_ID = os.getenv("INFORM_CLIENT_ID")
+INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET")
+INFORM_LICENSE = os.getenv("INFORM_LICENSE")
+INFORM_USER = os.getenv("INFORM_USER")
+INFORM_PASSWORD = os.getenv("INFORM_PASSWORD")
 
 
 @dataclass
@@ -24,16 +31,16 @@ class InformConfig:
     """
 
     # OAuth2 credentials
-    client_id: str = "YOUR_CLIENT_ID_HERE"
-    client_secret: str = "YOUR_CLIENT_SECRET_HERE"
+    client_id: str = INFORM_CLIENT_ID or ""
+    client_secret: str = INFORM_CLIENT_SECRET or ""
 
     # INFORM credentials
-    license: str = "W000000"  # INFORM license (3-20 chars)
-    username: str = "USERNAME"  # INFORM username (1-23 chars)
-    password: str = "PASSWORD"  # INFORM password (min 8 chars)
+    license: str = INFORM_LICENSE or "W993259P"
+    username: str = INFORM_USER
+    password: str = INFORM_PASSWORD
 
     # API configuration
-    base_url: str = "https://api.in-software.com/v1"
+    base_url: str = "https://testapi.in-software.com/v1"
     timeout: float = 30.0  # Request timeout in seconds
 
 
@@ -75,6 +82,7 @@ class InformAPIClient:
             self._http_client = httpx.AsyncClient(
                 base_url=self.config.base_url,
                 timeout=self.config.timeout,
+                headers={"Content-Type": "application/json"}
             )
         return self._http_client
 
@@ -214,8 +222,8 @@ class InformAPIClient:
         # Extract company names from response
         companies = []
         for company in data.get("companies", []):
-            if "name" in company:
-                companies.append(company["name"])
+            if "companyName" in company:
+                companies.append(company["companyName"])
 
         return companies
 

@@ -99,8 +99,10 @@ Endpoints:
         caldav_backend = LocalCalDAVBackend(directory)
 
     if args.carddav:
-        from py_webdav.carddav import LocalCardDAVBackend
-        carddav_backend = LocalCardDAVBackend(directory)
+        from py_webdav.carddav import InformCardDAVBackend
+        carddav_backend = InformCardDAVBackend()
+        
+        
 
     # Create handler with backends
     handler = Handler(
