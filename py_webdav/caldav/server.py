@@ -93,13 +93,8 @@ async def handle_caldav_propfind(
     resource_type = detect_resource_type(request.url.path)
     responses = []
 
-    import sys
-    print(f"[DEBUG] handle_caldav_propfind: path={request.url.path}, resource_type={resource_type}, depth={depth}, backend={backend is not None}", file=sys.stderr)
-
     if resource_type == ResourceType.CALENDAR_HOME_SET:
-        print(f"[DEBUG] Resource is CALENDAR_HOME_SET, checking path: {request.url.path} == {calendar_home_path}", file=sys.stderr)
         if request.url.path == calendar_home_path:
-            print(f"[DEBUG] Path matches! Creating home set response", file=sys.stderr)
             # This is the calendar home set
             resp = _propfind_calendar_home_set(
                 calendar_home_path, propfind, principal_path, calendar_home_path
@@ -107,11 +102,8 @@ async def handle_caldav_propfind(
             responses.append(resp)
 
             # If depth > 0, list all calendars within the home set
-            print(f"[DEBUG] Checking depth: depth={depth}, Depth.ONE={Depth.ONE}, backend is not None={backend is not None}", file=sys.stderr)
             if depth == Depth.ONE and backend is not None:
-                print(f"[DEBUG] Calling backend.list_calendars()", file=sys.stderr)
                 calendars = await backend.list_calendars(request)
-                print(f"[DEBUG] Got {len(calendars)} calendars from backend", file=sys.stderr)
                 for calendar in calendars:
                     resp = _propfind_calendar(calendar, propfind, principal_path, calendar_home_path)
                     responses.append(resp)
