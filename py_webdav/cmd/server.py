@@ -54,6 +54,11 @@ Endpoints:
         help="enable CardDAV contact support",
     )
     parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="enable debug logging (logs request/response bodies with formatted XML)",
+    )
+    parser.add_argument(
         "directory",
         nargs="?",
         default=".",
@@ -70,6 +75,11 @@ Endpoints:
     if not directory.is_dir():
         print(f"Error: path is not a directory: {directory}", file=sys.stderr)
         sys.exit(1)
+
+    # Setup debug logging if requested
+    if args.debug:
+        from py_webdav.debug import setup_debug_logging
+        setup_debug_logging()
 
     # Create WebDAV app with CalDAV/CardDAV support if requested
     from py_webdav import LocalFileSystem
@@ -97,6 +107,7 @@ Endpoints:
         enable_principal_discovery=(args.caldav or args.carddav),
         caldav_backend=caldav_backend,
         carddav_backend=carddav_backend,
+        debug=args.debug,
     )
 
     async def webdav_handler(request):  # type: ignore

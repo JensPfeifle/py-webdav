@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import BinaryIO, Protocol
+from typing import Any, BinaryIO, Protocol
 
 from lxml import etree
 from starlette.applications import Starlette
@@ -357,6 +357,7 @@ class Handler:
         addressbook_home_path: str | None = None,
         caldav_backend=None,
         carddav_backend=None,
+        debug: bool = False,
     ):
         """Initialize handler.
 
@@ -368,12 +369,14 @@ class Handler:
             addressbook_home_path: Path to addressbook home set (default: /contacts/)
             caldav_backend: Optional CalDAV backend instance
             carddav_backend: Optional CardDAV backend instance
+            debug: Enable debug logging
         """
         self.filesystem = filesystem
         self.backend = WebDAVBackend(filesystem)
         self.internal_handler = InternalHandler(self.backend)
         self.enable_principal_discovery = enable_principal_discovery
         self.principal_path = principal_path
+        self.debug = debug
 
         # Set default home paths if not provided
         if calendar_home_path is None:
@@ -395,6 +398,31 @@ class Handler:
         Returns:
             Starlette response
         """
+        # Log incoming request if debug is enabled
+        request_body: bytes | None = None
+        if self.debug:
+            from .debug import log_request
+
+            # Read and cache the request body
+            request_body = await request.body()
+
+            # Convert headers to dict
+            headers = dict(request.headers.items())
+
+            log_request(request.method, str(request.url.path), headers, request_body)
+
+            # Replace request with one that has cached body
+            # This is necessary because request.body() can only be called once
+            from starlette.datastructures import Headers
+
+            async def receive():
+                return {"type": "http.request", "body": request_body}
+
+            request = Request(
+                scope=request.scope,
+                receive=receive,
+            )
+
         if self.filesystem is None:
             return StarletteResponse(content="webdav: no filesystem available", status_code=500)
 
@@ -404,11 +432,17 @@ class Handler:
             if request.url.path == "/.well-known/caldav":
                 from starlette.responses import RedirectResponse
 
-                return RedirectResponse(url=self.principal_path, status_code=308)
+                response = RedirectResponse(url=self.principal_path, status_code=308)
+                if self.debug:
+                    await self._log_response(response)
+                return response
             if request.url.path == "/.well-known/carddav":
                 from starlette.responses import RedirectResponse
 
-                return RedirectResponse(url=self.principal_path, status_code=308)
+                response = RedirectResponse(url=self.principal_path, status_code=308)
+                if self.debug:
+                    await self._log_response(response)
+                return response
 
             # Check if this is a principal path request
             if request.url.path == self.principal_path or request.url.path.startswith(
@@ -421,7 +455,10 @@ class Handler:
                     calendar_home_set_path=self.calendar_home_path,
                     addressbook_home_set_path=self.addressbook_home_path,
                 )
-                return await serve_principal(request, options)
+                response = await serve_principal(request, options)
+                if self.debug:
+                    await self._log_response(response)
+                return response
 
             # Check if this is a CalDAV path request (home set or calendars within it)
             if (
@@ -444,13 +481,22 @@ class Handler:
                     depth_str = request.headers.get("depth", "0")
                     depth = parse_depth(depth_str)
 
-                    return await handle_caldav_propfind(
+                    response = await handle_caldav_propfind(
                         request, propfind, depth, self.calendar_home_path, self.principal_path, self.caldav_backend
                     )
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except HTTPError as e:
-                    return StarletteResponse(content=str(e), status_code=e.code)
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except Exception as e:
-                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
 
             # Check if this is a CardDAV path request (home set or addressbooks within it)
             if (
@@ -473,13 +519,22 @@ class Handler:
                     depth_str = request.headers.get("depth", "0")
                     depth = parse_depth(depth_str)
 
-                    return await handle_carddav_propfind(
+                    response = await handle_carddav_propfind(
                         request, propfind, depth, self.addressbook_home_path, self.principal_path, self.carddav_backend
                     )
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except HTTPError as e:
-                    return StarletteResponse(content=str(e), status_code=e.code)
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except Exception as e:
-                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
 
             # Handle REPORT requests for CalDAV paths
             if (
@@ -490,13 +545,22 @@ class Handler:
                 from .caldav.server import handle_caldav_report
 
                 try:
-                    return await handle_caldav_report(
+                    response = await handle_caldav_report(
                         request, self.calendar_home_path, self.principal_path, self.caldav_backend
                     )
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except HTTPError as e:
-                    return StarletteResponse(content=str(e), status_code=e.code)
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except Exception as e:
-                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
 
             # Handle REPORT requests for CardDAV paths
             if (
@@ -507,15 +571,54 @@ class Handler:
                 from .carddav.server import handle_carddav_report
 
                 try:
-                    return await handle_carddav_report(
+                    response = await handle_carddav_report(
                         request, self.addressbook_home_path, self.principal_path, self.carddav_backend
                     )
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except HTTPError as e:
-                    return StarletteResponse(content=str(e), status_code=e.code)
+                    response = StarletteResponse(content=str(e), status_code=e.code)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
                 except Exception as e:
-                    return StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    response = StarletteResponse(content=f"Internal error: {e}", status_code=500)
+                    if self.debug:
+                        await self._log_response(response)
+                    return response
 
-        return await self.internal_handler.handle(request)
+        response = await self.internal_handler.handle(request)
+
+        # Log outgoing response if debug is enabled
+        if self.debug:
+            from .debug import log_response
+
+            await self._log_response(response)
+
+        return response
+
+    async def _log_response(self, response: StarletteResponse) -> None:
+        """Log an outgoing response for debugging.
+
+        Args:
+            response: Starlette response
+        """
+        from .debug import log_response
+
+        # Extract response headers
+        headers: dict[str, Any] = dict(response.headers.items())
+
+        # Extract response body
+        body: bytes | None = None
+        if isinstance(response, StreamingResponse):
+            # For streaming responses, we can't easily capture the body
+            # without consuming it, so we'll skip logging the body
+            body = None
+        elif hasattr(response, "body"):
+            body = response.body
+
+        log_response(response.status_code, headers, body)
 
 
 def create_app(filesystem: FileSystem) -> Starlette:
