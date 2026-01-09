@@ -18,11 +18,13 @@ from .caldav import (
     validate_calendar_object,
 )
 from .fs_backend import LocalCalDAVBackend
+from .inform_backend import InformCalDAVBackend
 from .server import handle_caldav_propfind
 
 __all__ = [
     "CalDAVBackend",
     "LocalCalDAVBackend",
+    "InformCalDAVBackend",
     "CAPABILITY_CALENDAR",
     "Calendar",
     "CalendarCompRequest",

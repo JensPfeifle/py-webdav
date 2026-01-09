@@ -36,8 +36,8 @@ class InformConfig:
 
     # INFORM credentials
     license: str = INFORM_LICENSE or "W993259P"
-    username: str = INFORM_USER
-    password: str = INFORM_PASSWORD
+    username: str = INFORM_USER or ""
+    password: str = INFORM_PASSWORD or ""
 
     # API configuration
     base_url: str = "https://testapi.in-software.com/v1"
@@ -296,3 +296,135 @@ class InformAPIClient:
 
         data: dict[str, Any] = response.json()
         return data
+
+    # Calendar Events API methods
+
+    async def get_calendar_events_occurrences(
+        self,
+        owner_key: str,
+        start_datetime: str,
+        end_datetime: str,
+        offset: int = 0,
+        limit: int = 1000,
+        fields: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Get calendar event occurrences for an owner in a date range.
+
+        Returns both single events and serial event occurrences.
+
+        Args:
+            owner_key: Employee key who owns the events
+            start_datetime: Start of date range (ISO 8601)
+            end_datetime: End of date range (ISO 8601)
+            offset: Pagination offset
+            limit: Maximum number of results (max 1000)
+            fields: List of fields to return
+
+        Returns:
+            Dictionary with 'calendarEvents', 'count', and 'totalCount' keys
+        """
+        params: dict[str, Any] = {
+            "ownerKey": owner_key,
+            "endDateTime.gte": start_datetime,
+            "startDateTime.lte": end_datetime,
+            "offset": offset,
+            "limit": min(limit, 1000),
+        }
+
+        if fields:
+            params["fields"] = ",".join(fields)
+
+        response = await self._make_request(
+            "GET",
+            "/calendarEventsOccurrences",
+            params=params,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def get_calendar_event(
+        self,
+        event_key: str,
+        fields: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Get single calendar event by key.
+
+        Args:
+            event_key: Calendar event identification key
+            fields: List of fields to return
+
+        Returns:
+            Calendar event data dictionary
+        """
+        params: dict[str, Any] = {}
+
+        if fields:
+            params["fields"] = ",".join(fields)
+
+        response = await self._make_request(
+            "GET",
+            f"/calendarEvents/{event_key}",
+            params=params,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def create_calendar_event(
+        self,
+        event_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Create a new calendar event.
+
+        Args:
+            event_data: Calendar event data (single or serial)
+
+        Returns:
+            Created calendar event data
+        """
+        response = await self._make_request(
+            "POST",
+            "/calendarEvents",
+            json=event_data,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def update_calendar_event(
+        self,
+        event_key: str,
+        event_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update an existing calendar event.
+
+        Args:
+            event_key: Calendar event identification key
+            event_data: Partial calendar event data to update
+
+        Returns:
+            Updated calendar event data
+        """
+        response = await self._make_request(
+            "PATCH",
+            f"/calendarEvents/{event_key}",
+            json=event_data,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def delete_calendar_event(
+        self,
+        event_key: str,
+    ) -> None:
+        """Delete a calendar event.
+
+        Args:
+            event_key: Calendar event identification key
+        """
+        await self._make_request(
+            "DELETE",
+            f"/calendarEvents/{event_key}",
+        )
