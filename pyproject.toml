@@ -3,7 +3,7 @@ name = "py-webdav"
 version = "0.1.0"
 description = "A Python library for WebDAV, CalDAV and CardDAV"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = { text = "MIT" }
 dependencies = [
     "uvicorn[standard]>=0.30.0",
@@ -23,6 +23,8 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.10.0",
     "types-python-dateutil>=2.9.0",
+    "lxml-stubs>=0.5.1",
+    "types-vobject>=0.9.9.20250708",
 ]
 
 [tool.ruff]
@@ -56,11 +58,19 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+exclude = 'tests'
 
 [tool.setuptools]
 packages = ["py_webdav"]
+
+[dependency-groups]
+dev = [
+    "lxml-stubs>=0.5.1",
+    "types-icalendar>=6.3.2.20251222",
+    "types-vobject>=0.9.9.20250708",
+]
