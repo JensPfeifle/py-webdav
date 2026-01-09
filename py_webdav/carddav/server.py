@@ -579,6 +579,7 @@ async def _handle_addressbook_query(
 ) -> Response:
     """Handle addressbook-query REPORT."""
     from .carddav import AddressBookQuery
+    from ..internal.elements import Prop
 
     # Build AddressBookQuery from the parsed report
     # For now, we'll return all objects (filtering not yet implemented)
@@ -592,7 +593,14 @@ async def _handle_addressbook_query(
         objects = []
 
     # Build PropFind from query
+    prop_obj = None
+    if query.prop:
+        # Convert tag names to etree.Element objects
+        prop_elements = [etree.Element(tag) for tag in query.prop]
+        prop_obj = Prop(raw=prop_elements)
+
     propfind = PropFind(
+        prop=prop_obj,
         allprop=query.allprop,
         propname=query.propname,
     )
@@ -615,8 +623,17 @@ async def _handle_addressbook_multiget(
     backend,  # CardDAVBackend
 ) -> Response:
     """Handle addressbook-multiget REPORT."""
+    from ..internal.elements import Prop
+
     # Build PropFind from multiget
+    prop_obj = None
+    if multiget.prop:
+        # Convert tag names to etree.Element objects
+        prop_elements = [etree.Element(tag) for tag in multiget.prop]
+        prop_obj = Prop(raw=prop_elements)
+
     propfind = PropFind(
+        prop=prop_obj,
         allprop=multiget.allprop,
         propname=multiget.propname,
     )
