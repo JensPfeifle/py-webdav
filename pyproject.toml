@@ -40,13 +40,13 @@ select = [
     "UP", # pyupgrade
 ]
 ignore = [
-    "E501",  # line too long, handled by formatter
-    "B008",  # do not perform function calls in argument defaults
-    "C901",  # too complex
+    "E501", # line too long, handled by formatter
+    "B008", # do not perform function calls in argument defaults
+    "C901", # too complex
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # unused imports in __init__.py
+"__init__.py" = ["F401"] # unused imports in __init__.py
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -62,9 +62,5 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[project.scripts]
-py-webdav-server = "py_webdav.cmd.server:main"
+[tool.setuptools]
+packages = ["py_webdav"]
