@@ -6,6 +6,7 @@ import mimetypes
 import os
 import shutil
 from datetime import UTC, datetime
+from hashlib import md5
 from pathlib import Path
 from typing import BinaryIO
 
@@ -116,8 +117,14 @@ class LocalFileSystem:
             mime_type, _ = mimetypes.guess_type(str(path))
             mime_type = mime_type or "application/octet-stream"
 
-        # Create ETag from mtime and size
-        etag = f"{stat.st_mtime_ns:x}{stat.st_size:x}"
+        # Create ETag - use content hash for CalDAV/CardDAV files to match backend behavior
+        if not path.is_dir() and (path.suffix == ".vcf" or path.suffix == ".ics"):
+            # Use MD5 of content for .vcf and .ics files (matches CardDAV/CalDAV backends)
+            content = path.read_bytes()
+            etag = md5(content).hexdigest()
+        else:
+            # Use mtime + size for other files
+            etag = f"{stat.st_mtime_ns:x}{stat.st_size:x}"
 
         return FileInfo(
             path=webdav_path,
