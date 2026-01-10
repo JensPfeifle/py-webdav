@@ -908,3 +908,282 @@ class TestInformAPIWorkflows:
             # Verify deletion
             with pytest.raises(Exception):
                 await api_client.get_calendar_event(event_key)
+
+
+class TestInformAPIAllDayEvents:
+    """Test all-day events through the INFORM API."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_create_all_day_single_event(self, api_client):
+        """Test creating a single all-day event."""
+        today = datetime.now(UTC).date()
+        tomorrow = today + timedelta(days=1)
+
+        # Create all-day event
+        event_data = {
+            "eventMode": "single",
+            "subject": "All-Day Event Test",
+            "ownerKey": api_client.config.username,
+            "startDateTime": f"{today}T00:00:00Z",
+            "endDateTime": f"{tomorrow}T00:00:00Z",
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "wholeDayEvent": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # Retrieve and verify
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+            
+            assert retrieved["wholeDayEvent"] is True
+            assert retrieved["eventMode"] == "single"
+            assert retrieved["subject"] == "All-Day Event Test"
+            
+            # Check datetime format
+            assert f"{today}" in retrieved["startDateTime"]
+            assert f"{tomorrow}" in retrieved["endDateTime"]
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_all_day_event_with_date_objects(self, api_client):
+        """Test all-day event using date-only format (YYYY-MM-DD)."""
+        today = datetime.now(UTC).date()
+        
+        # Try creating with date strings (no time component)
+        event_data = {
+            "eventMode": "single",
+            "subject": "Date-Only All-Day Event",
+            "ownerKey": api_client.config.username,
+            "startDateTime": f"{today}T00:00:00Z",
+            "endDateTime": f"{today}T00:00:00Z",
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "wholeDayEvent": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+            
+            assert retrieved["wholeDayEvent"] is True
+            assert retrieved["subject"] == "Date-Only All-Day Event"
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_multi_day_event(self, api_client):
+        """Test multi-day all-day event (spans multiple days)."""
+        start_date = datetime.now(UTC).date()
+        end_date = start_date + timedelta(days=3)  # 3-day event
+
+        event_data = {
+            "eventMode": "single",
+            "subject": "Multi-Day Event (3 days)",
+            "ownerKey": api_client.config.username,
+            "startDateTime": f"{start_date}T00:00:00Z",
+            "endDateTime": f"{end_date}T00:00:00Z",
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "wholeDayEvent": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+            
+            assert retrieved["wholeDayEvent"] is True
+            assert f"{start_date}" in retrieved["startDateTime"]
+            assert f"{end_date}" in retrieved["endDateTime"]
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_convert_timed_to_all_day(self, api_client):
+        """Test converting a timed event to all-day event via PATCH."""
+        today = datetime.now(UTC).date()
+        tomorrow = today + timedelta(days=1)
+
+        # Create timed event
+        event_data = {
+            "eventMode": "single",
+            "subject": "Convert to All-Day Test",
+            "ownerKey": api_client.config.username,
+            "startDateTime": f"{today}T14:00:00Z",
+            "endDateTime": f"{today}T15:00:00Z",
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "wholeDayEvent": False,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # Verify it's a timed event
+            original = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert original["wholeDayEvent"] is False
+
+            # Convert to all-day
+            patch_data = {
+                "startDateTime": f"{today}T00:00:00Z",
+                "endDateTime": f"{tomorrow}T00:00:00Z",
+                "wholeDayEvent": True,
+            }
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # Verify conversion
+            updated = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert updated["wholeDayEvent"] is True
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_convert_all_day_to_timed(self, api_client):
+        """Test converting an all-day event to timed event via PATCH."""
+        today = datetime.now(UTC).date()
+        tomorrow = today + timedelta(days=1)
+
+        # Create all-day event
+        event_data = {
+            "eventMode": "single",
+            "subject": "Convert to Timed Test",
+            "ownerKey": api_client.config.username,
+            "startDateTime": f"{today}T00:00:00Z",
+            "endDateTime": f"{tomorrow}T00:00:00Z",
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "wholeDayEvent": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # Verify it's all-day
+            original = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert original["wholeDayEvent"] is True
+
+            # Convert to timed event
+            patch_data = {
+                "startDateTime": f"{today}T09:00:00Z",
+                "endDateTime": f"{today}T17:00:00Z",
+                "wholeDayEvent": False,
+            }
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # Verify conversion
+            updated = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert updated["wholeDayEvent"] is False
+            assert "09:00:00" in updated["startDateTime"]
+            assert "17:00:00" in updated["endDateTime"]
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_all_day_recurring_event(self, api_client):
+        """Test recurring all-day event (e.g., holidays).
+
+        Note: INFORM API requires time fields even for all-day recurring events.
+        See INFORM_API_QUIRKS.md for details.
+        """
+        start_date = datetime.now(UTC).date()
+
+        # Create recurring all-day event (daily for 5 days)
+        # NOTE: INFORM API quirk - must include time fields even for wholeDayEvent=true
+        event_data = {
+            "eventMode": "serial",
+            "subject": "Recurring All-Day Event",
+            "ownerKey": api_client.config.username,
+            "seriesStartDate": start_date.strftime("%Y-%m-%d"),
+            "occurrenceStartTime": 0,  # Required for recurring all-day events
+            "occurrenceStartTimeEnabled": True,
+            "occurrenceEndTime": 86340,  # Required for recurring all-day events
+            "occurrenceEndTimeEnabled": True,
+            "wholeDayEvent": True,
+            "seriesSchema": {
+                "schemaType": "daily",
+                "dailySchemaData": {"regularity": "interval", "daysInterval": 1},
+            },
+            "seriesEndDate": (start_date + timedelta(days=4)).strftime("%Y-%m-%d"),
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+
+            assert retrieved["eventMode"] == "serial"
+            assert retrieved["wholeDayEvent"] is True
+            assert retrieved["subject"] == "Recurring All-Day Event"
+
+        finally:
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_caldav_all_day_event_workflow(self, caldav_backend):
+        """Test CalDAV backend with all-day events."""
+        from unittest.mock import MagicMock
+
+        request = MagicMock()
+        calendar_path = caldav_backend._get_calendar_path()
+
+        today = datetime.now(UTC).date()
+
+        # Create all-day event via CalDAV (using iCal format)
+        ical_data = f"""BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:test-all-day-caldav-{datetime.now(UTC).timestamp()}
+DTSTART;VALUE=DATE:{today.strftime('%Y%m%d')}
+DTEND;VALUE=DATE:{(today + timedelta(days=1)).strftime('%Y%m%d')}
+SUMMARY:CalDAV All-Day Event Test
+DESCRIPTION:Testing all-day event via CalDAV
+CLASS:PUBLIC
+END:VEVENT
+END:VCALENDAR"""
+
+        object_path = f"{calendar_path}test-all-day-{datetime.now(UTC).timestamp()}.ics"
+        
+        try:
+            # Create via CalDAV
+            calendar_object = await caldav_backend.put_calendar_object(
+                request, object_path, ical_data, if_none_match=True
+            )
+
+            # Verify the event was created and returned data contains date
+            assert calendar_object.data
+            assert "CalDAV All-Day Event Test" in calendar_object.data
+            assert "DTSTART" in calendar_object.data
+            
+            # The returned iCal should preserve the all-day nature
+            # (dates without time component)
+            assert ";VALUE=DATE:" in calendar_object.data or f"{today.strftime('%Y%m%d')}" in calendar_object.data
+
+        finally:
+            # Cleanup
+            try:
+                await caldav_backend.delete_calendar_object(request, calendar_object.path)
+            except Exception:
+                pass
