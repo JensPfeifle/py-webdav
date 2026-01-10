@@ -13,6 +13,12 @@ services:
       - WEBDAV_HOST=0.0.0.0
       - WEBDAV_PORT=8080
       - WEBDAV_DIR=/data
+      # INFORM API configuration
+      - INFORM_CLIENT_ID=${INFORM_CLIENT_ID}
+      - INFORM_CLIENT_SECRET=${INFORM_CLIENT_SECRET}
+      - INFORM_LICENSE=${INFORM_LICENSE}
+      - INFORM_USER=${INFORM_USER}
+      - INFORM_PASSWORD=${INFORM_PASSWORD}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8080', method='OPTIONS'); urllib.request.urlopen(req)"]
