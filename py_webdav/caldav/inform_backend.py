@@ -73,6 +73,28 @@ class InformCalDAVBackend:
         end = now + timedelta(weeks=self._sync_weeks)
         return start, end
 
+    def _format_datetime_for_inform(self, dt: datetime) -> str:
+        """Format datetime for INFORM API.
+
+        INFORM API requires datetime in format: YYYY-MM-DDTHH:MM:SSZ
+        - Must use 'Z' suffix (not +00:00)
+        - Must NOT include microseconds
+
+        Args:
+            dt: Datetime object (should be UTC)
+
+        Returns:
+            Formatted datetime string
+        """
+        # Ensure datetime is in UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        elif dt.tzinfo != UTC:
+            dt = dt.astimezone(UTC)
+
+        # Format without microseconds, with Z suffix
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
     def _parse_object_path(self, path: str) -> str:
         """Parse object path to extract event key.
 
@@ -454,13 +476,13 @@ class InformCalDAVBackend:
             # Parse DTSTART
             dtstart = event.get("dtstart").dt
             if isinstance(dtstart, datetime):
-                event_data["startDateTime"] = dtstart.isoformat()
+                event_data["startDateTime"] = self._format_datetime_for_inform(dtstart)
                 event_data["wholeDayEvent"] = False
                 event_data["startDateTimeEnabled"] = True
             else:
                 # Convert date to datetime
                 dt = datetime.combine(dtstart, datetime.min.time()).replace(tzinfo=UTC)
-                event_data["startDateTime"] = dt.isoformat()
+                event_data["startDateTime"] = self._format_datetime_for_inform(dt)
                 event_data["wholeDayEvent"] = True
                 event_data["startDateTimeEnabled"] = True
 
@@ -468,13 +490,13 @@ class InformCalDAVBackend:
             if "dtend" in event:
                 dtend = event.get("dtend").dt
                 if isinstance(dtend, datetime):
-                    event_data["endDateTime"] = dtend.isoformat()
+                    event_data["endDateTime"] = self._format_datetime_for_inform(dtend)
                     event_data["endDateTimeEnabled"] = True
                 else:
                     dt = datetime.combine(dtend, datetime.min.time()).replace(
                         tzinfo=UTC
                     )
-                    event_data["endDateTime"] = dt.isoformat()
+                    event_data["endDateTime"] = self._format_datetime_for_inform(dt)
                     event_data["endDateTimeEnabled"] = True
 
         # Parse alarms for reminders
@@ -705,8 +727,8 @@ class InformCalDAVBackend:
         # Fetch events from INFORM API
         response = await self.api_client.get_calendar_events_occurrences(
             owner_key=self.owner_key,
-            start_datetime=start_date.isoformat(),
-            end_datetime=end_date.isoformat(),
+            start_datetime=self._format_datetime_for_inform(start_date),
+            end_datetime=self._format_datetime_for_inform(end_date),
             limit=1000,
         )
 
@@ -781,8 +803,8 @@ class InformCalDAVBackend:
         # Fetch events from INFORM API
         response = await self.api_client.get_calendar_events_occurrences(
             owner_key=self.owner_key,
-            start_datetime=start_date.isoformat(),
-            end_datetime=end_date.isoformat(),
+            start_datetime=self._format_datetime_for_inform(start_date),
+            end_datetime=self._format_datetime_for_inform(end_date),
             limit=1000,
         )
 
