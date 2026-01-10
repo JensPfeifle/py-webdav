@@ -486,7 +486,6 @@ END:VCALENDAR"""
     async def test_rrule_conversion_daily(self, caldav_backend):
         """Test daily recurrence rule conversion."""
         # Test internal conversion methods
-        from py_webdav.caldav.inform_backend import InformCalDAVBackend
 
         # Test daily with interval
         rrule = {"freq": ["DAILY"], "interval": [2]}

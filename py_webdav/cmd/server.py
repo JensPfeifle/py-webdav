@@ -101,8 +101,8 @@ Endpoints:
     if args.carddav:
         from py_webdav.carddav import InformCardDAVBackend
         carddav_backend = InformCardDAVBackend()
-        
-        
+
+
 
     # Create handler with backends
     handler = Handler(

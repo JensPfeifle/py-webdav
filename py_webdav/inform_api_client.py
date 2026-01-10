@@ -9,10 +9,10 @@ Can be reused for both CardDAV and CalDAV backend implementations.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+import os
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
-import os
 
 import httpx
 

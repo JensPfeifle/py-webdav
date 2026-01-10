@@ -16,7 +16,6 @@ from ..inform_api_client import InformAPIClient, InformConfig
 from ..internal import HTTPError
 from .carddav import AddressBook, AddressBookQuery, AddressObject
 
-
 # Address book names for each INFORM address type
 ADDRESS_BOOK_MAPPING = {
     "customer": {"name": "Customers", "description": "Customer addresses from INFORM"},

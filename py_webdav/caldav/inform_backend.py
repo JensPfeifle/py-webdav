@@ -296,8 +296,9 @@ class InformCalDAVBackend:
                     )
                     event.add("dtstart", start_dt)
 
-                # Duration for recurring events
-                duration_secs = occ_end_time - occ_start_time
+                # Calculate end time for recurring events
+                # Duration for reference (currently unused)
+                _duration_secs = occ_end_time - occ_start_time
                 if not whole_day:
                     end_hours = int(occ_end_time // 3600)
                     end_minutes = int((occ_end_time % 3600) // 60)
@@ -839,7 +840,7 @@ class InformCalDAVBackend:
 
         # Check if event exists
         try:
-            existing_event = await self.api_client.get_calendar_event(event_key)
+            _existing_event = await self.api_client.get_calendar_event(event_key)
             event_exists = True
         except Exception:
             event_exists = False
@@ -855,7 +856,7 @@ class InformCalDAVBackend:
         try:
             if event_exists:
                 # Update existing event
-                updated_event = await self.api_client.update_calendar_event(
+                _updated_event = await self.api_client.update_calendar_event(
                     event_key, event_data
                 )
             else:
