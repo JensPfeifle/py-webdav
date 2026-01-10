@@ -260,10 +260,8 @@ class InformCalDAVBackend:
         if subject:
             event.add("summary", subject)
 
-        # Description (content)
+        # Description (content) - will add debug info later
         content = event_data.get("content", "")
-        if content:
-            event.add("description", content)
 
         # Location
         location = event_data.get("location", "")
@@ -368,6 +366,34 @@ class InformCalDAVBackend:
             event.add("class", "PRIVATE")
         else:
             event.add("class", "PUBLIC")
+
+        # Add description with debug information
+        event_key = event_data.get("key", "")
+        event_mode = event_data.get("eventMode", "single")
+        series_schema = event_data.get("seriesSchema", {})
+
+        debug_lines = []
+        debug_lines.append(f"[DEBUG] Event ID: {event_key}")
+        debug_lines.append(f"[DEBUG] Event Mode: {event_mode}")
+
+        if event_mode == "serial" and series_schema:
+            import json
+            debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
+            debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
+            debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
+
+            # Add the generated RRULE if it exists in the event
+            if "rrule" in event:
+                rrule_value = event.get("rrule")
+                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_value}")
+
+        # Combine original content with debug info
+        if content:
+            full_description = content + "\n\n" + "\n".join(debug_lines)
+        else:
+            full_description = "\n".join(debug_lines)
+
+        event.add("description", full_description)
 
         # Last modified (use current time)
         event.add("dtstamp", datetime.now(UTC))
