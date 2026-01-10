@@ -744,10 +744,11 @@ class InformCalDAVBackend:
             occurrence_id = event_data.get("occurrenceId")
             if occurrence_id:
                 # This is an occurrence of a serial event
-                # Fetch the full serial event definition
+                # Fetch the full serial event definition with all fields
+                # (needed to get seriesSchema for RRULE generation)
                 try:
                     full_event_data = await self.api_client.get_calendar_event(
-                        event_key
+                        event_key, fields=["all"]
                     )
                     event_data = full_event_data
                 except Exception:
@@ -821,12 +822,13 @@ class InformCalDAVBackend:
 
             seen_keys.add(event_key)
 
-            # For occurrences, fetch full event
+            # For occurrences, fetch full event with all fields
+            # (needed to get seriesSchema for RRULE generation)
             occurrence_id = event_data.get("occurrenceId")
             if occurrence_id:
                 try:
                     full_event_data = await self.api_client.get_calendar_event(
-                        event_key
+                        event_key, fields=["all"]
                     )
                     event_data = full_event_data
                 except Exception:
