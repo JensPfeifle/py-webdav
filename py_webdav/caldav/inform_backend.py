@@ -735,10 +735,15 @@ class InformCalDAVBackend:
         events = response.get("calendarEvents", [])
         objects = []
 
+        # Track unique event keys (avoid duplicates from occurrences)
+        seen_keys = set()
+
         for event_data in events:
             event_key = event_data.get("key", "")
-            if not event_key:
+            if not event_key or event_key in seen_keys:
                 continue
+
+            seen_keys.add(event_key)
 
             # For occurrences of serial events, we need to fetch the full event
             occurrence_id = event_data.get("occurrenceId")
