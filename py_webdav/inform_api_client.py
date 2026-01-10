@@ -16,11 +16,11 @@ from typing import Any
 
 import httpx
 
-INFORM_CLIENT_ID = os.getenv("INFORM_CLIENT_ID")
-INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET")
-INFORM_LICENSE = os.getenv("INFORM_LICENSE")
-INFORM_USER = os.getenv("INFORM_USER")
-INFORM_PASSWORD = os.getenv("INFORM_PASSWORD")
+INFORM_CLIENT_ID = os.getenv("INFORM_CLIENT_ID", "").strip('"')
+INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET", "").strip('"')
+INFORM_LICENSE = os.getenv("INFORM_LICENSE", "").strip('"')
+INFORM_USER = os.getenv("INFORM_USER", "").strip('"')
+INFORM_PASSWORD = os.getenv("INFORM_PASSWORD", "").strip('"')
 
 
 @dataclass

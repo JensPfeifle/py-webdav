@@ -381,7 +381,7 @@ class InformCalDAVBackend:
 
         # Content (description)
         if "description" in event:
-            event_data["description"] = str(event["description"])
+            event_data["content"] = str(event["description"])
 
         # Location
         if "location" in event:
@@ -412,11 +412,13 @@ class InformCalDAVBackend:
                 # Extract time in seconds from midnight
                 seconds = dtstart.hour * 3600 + dtstart.minute * 60
                 event_data["occurrenceStartTime"] = seconds
+                event_data["occurrenceStartTimeEnabled"] = True
                 event_data["wholeDayEvent"] = False
             else:
                 # Date only (all-day event)
                 event_data["seriesStartDate"] = dtstart.isoformat()
                 event_data["occurrenceStartTime"] = 0
+                event_data["occurrenceStartTimeEnabled"] = True
                 event_data["wholeDayEvent"] = True
 
             # Parse DTEND or duration
@@ -425,8 +427,10 @@ class InformCalDAVBackend:
                 if isinstance(dtend, datetime):
                     seconds = dtend.hour * 3600 + dtend.minute * 60
                     event_data["occurrenceEndTime"] = seconds
+                    event_data["occurrenceEndTimeEnabled"] = True
                 else:
                     event_data["occurrenceEndTime"] = 86340  # End of day
+                    event_data["occurrenceEndTimeEnabled"] = True
 
             # Parse RRULE
             rrule = event.get("rrule")
@@ -450,22 +454,26 @@ class InformCalDAVBackend:
             if isinstance(dtstart, datetime):
                 event_data["startDateTime"] = dtstart.isoformat()
                 event_data["wholeDayEvent"] = False
+                event_data["startDateTimeEnabled"] = True
             else:
                 # Convert date to datetime
                 dt = datetime.combine(dtstart, datetime.min.time()).replace(tzinfo=UTC)
                 event_data["startDateTime"] = dt.isoformat()
                 event_data["wholeDayEvent"] = True
+                event_data["startDateTimeEnabled"] = True
 
             # Parse DTEND
             if "dtend" in event:
                 dtend = event.get("dtend").dt
                 if isinstance(dtend, datetime):
                     event_data["endDateTime"] = dtend.isoformat()
+                    event_data["endDateTimeEnabled"] = True
                 else:
                     dt = datetime.combine(dtend, datetime.min.time()).replace(
                         tzinfo=UTC
                     )
                     event_data["endDateTime"] = dt.isoformat()
+                    event_data["endDateTimeEnabled"] = True
 
         # Parse alarms for reminders
         for component in event.walk():
@@ -664,7 +672,7 @@ class InformCalDAVBackend:
 
         # Fetch event from INFORM API
         try:
-            event_data = await self.api_client.get_calendar_event(event_key)
+            event_data = await self.api_client.get_calendar_event(event_key, fields=["all"])
         except Exception as e:
             raise HTTPError(404, Exception(f"Event not found: {event_key}")) from e
 
@@ -867,11 +875,16 @@ class InformCalDAVBackend:
                 event_key = created_event.get("key", event_key)
 
             # Fetch the created/updated event to get complete data
-            final_event = await self.api_client.get_calendar_event(event_key)
+            final_event = await self.api_client.get_calendar_event(event_key, fields=["all"])
 
             # Convert back to iCalendar
             result_ical = self._inform_event_to_ical(final_event)
             etag = md5(result_ical.encode()).hexdigest()
+
+            # Update path to use INFORM key as UID (if event was newly created)
+            if not event_exists:
+                calendar_path = self._get_calendar_path()
+                path = f"{calendar_path}{event_key}.ics"
 
             return CalendarObject(
                 path=path,
