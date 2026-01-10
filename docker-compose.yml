@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   webdav:
-    build: .
+    image: ghcr.io/jenspfeifle/pywebdav:claude-fix-integration-tests-gKo5U
     container_name: py-webdav-server
     ports:
       - "${WEBDAV_PORT:-8080}:8080"
@@ -20,3 +20,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: py-webdav-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=60
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - WATCHTOWER_LABEL_ENABLE=true
+    restart: unless-stopped
