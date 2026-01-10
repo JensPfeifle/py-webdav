@@ -4,12 +4,11 @@ services:
   webdav:
     image: ghcr.io/jenspfeifle/pywebdav:claude-fix-integration-tests-gKo5U
     container_name: py-webdav-server
-    command: ["sh", "-c", "python -m py_webdav.cmd.server --addr $WEBDAV_HOST --port $WEBDAV_PORT --carddav --caldav --debug-inform $WEBDAV_DIR"]
+    command: ["sh", "-c", "python -m py_webdav.cmd.server --addr 0.0.0.0 --port 8080 --carddav --caldav --debug-inform /data"]
     ports:
-      - "${WEBDAV_PORT:-8080}:8080"
+      - 100.104.140.52:8088:8080
     volumes:
-      # Mount your local directory to serve via WebDAV
-      - "${WEBDAV_DATA_DIR:-./webdav-data}:/data"
+      - ./webdav-data:/data
     environment:
       - WEBDAV_HOST=0.0.0.0
       - WEBDAV_PORT=8080
