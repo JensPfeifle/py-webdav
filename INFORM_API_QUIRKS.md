@@ -8,6 +8,7 @@ Each entry follows the IST (actual)/SOLL (expected) format.
 1. [Recurring All-Day Events Require Time Fields](#1-recurring-all-day-events-require-time-fields)
 2. [DateTime Format Strictness](#2-datetime-format-strictness)
 3. [Empty PATCH Requests](#3-empty-patch-requests)
+4. [Series Event Occurrences Missing Schema](#4-series-event-occurrences-missing-schema)
 
 ---
 
@@ -190,6 +191,104 @@ Always include at least one field in PATCH requests. If no changes are needed, c
 - CalDAV UPDATE operations must always include at least one field
 - Cannot use empty PATCH to verify resource existence
 - Minor inconvenience but acceptable API design
+
+---
+
+## 4. Series Event Occurrences Missing Schema
+
+### IST (Actual Behavior)
+
+When retrieving calendar events using the occurrences API endpoint (`GET /calendarEvents/occurrences`), the API returns occurrence data that **does not include** the series schema information for recurring events.
+
+**Occurrences API Response** (for a recurring event):
+```json
+{
+  "key": "74006900000092",
+  "occurrenceId": "740071",
+  "subject": "Weekly Team Meeting",
+  "ownerKey": "KINCHI",
+  "startDateTime": "2026-01-12T13:00:00Z",
+  "endDateTime": "2026-01-12T14:00:00Z",
+  "wholeDayEvent": false,
+  "location": "Meeting Room A"
+  // ❌ Missing: seriesStartDate, seriesEndDate, seriesSchema
+}
+```
+
+To get the complete series information, you must make a **second request** to `GET /calendarEvents/{key}` with `fields=all`:
+
+**Full Event Response** (with `fields=all`):
+```json
+{
+  "key": "74006900000092",
+  "eventMode": "serial",
+  "subject": "Weekly Team Meeting",
+  "seriesStartDate": "2026-01-10",
+  "seriesEndDate": "2026-01-24",
+  "occurrenceStartTime": 50400,
+  "occurrenceEndTime": 54000,
+  "seriesSchema": {
+    "schemaType": "weekly",
+    "weeklySchemaData": {
+      "weekdays": ["monday", "wednesday", "friday"],
+      "weeksInterval": 1
+    }
+  }
+  // ✅ Complete series information
+}
+```
+
+**Important:** Without `fields=all` parameter, even the direct GET request may not return the `seriesSchema`.
+
+### SOLL (Expected Behavior)
+
+The occurrences API should either:
+1. **Include series metadata** in occurrence responses (at least `eventMode`, `seriesSchema`)
+2. **Return complete event data** when occurrence belongs to a series
+3. **Document** which fields are available in occurrences vs. full event responses
+
+This would allow clients to:
+- Understand that an occurrence is part of a series
+- Reconstruct the recurrence rule without additional API calls
+- Display series information in calendar views efficiently
+
+### Workaround
+
+When working with calendar event occurrences:
+
+```python
+# 1. Fetch occurrences
+occurrences_response = await api.get_calendar_events_occurrences(
+    owner_key=owner,
+    start_datetime="2026-01-10T00:00:00Z",
+    end_datetime="2026-01-24T23:59:59Z"
+)
+
+# 2. Check each occurrence
+for event_data in occurrences_response["calendarEvents"]:
+    event_key = event_data["key"]
+    occurrence_id = event_data.get("occurrenceId")
+
+    # 3. If it's an occurrence, fetch full event with ALL fields
+    if occurrence_id:
+        full_event = await api.get_calendar_event(
+            event_key,
+            fields=["all"]  # ← Required to get seriesSchema
+        )
+        # Now full_event has seriesStartDate, seriesEndDate, seriesSchema
+        event_data = full_event
+```
+
+### Impact
+
+- **CalDAV implementations** need to fetch full event data for each occurrence to generate RRULE
+- **Performance penalty:** N+1 query problem (1 occurrences query + N individual event queries)
+- **Bandwidth usage:** Fetching full event data multiple times for the same series
+- **Complexity:** Requires caching and deduplication logic to avoid redundant API calls
+
+For CalDAV sync with 100 occurrences of 10 different series events:
+- Without optimization: 1 + 100 = **101 API calls**
+- With deduplication: 1 + 10 = **11 API calls** (tracking unique event keys)
 
 ---
 
