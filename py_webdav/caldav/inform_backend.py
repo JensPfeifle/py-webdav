@@ -33,6 +33,7 @@ class InformCalDAVBackend:
         home_set_path: str = "/calendars/",
         principal_path: str = "/principals/current/",
         owner_key: str | None = None,
+        debug: bool = False,
     ) -> None:
         """Initialize INFORM CalDAV backend.
 
@@ -41,8 +42,9 @@ class InformCalDAVBackend:
             home_set_path: Calendar home set path
             principal_path: User principal path
             owner_key: Employee key who owns the calendar (required)
+            debug: Enable debug logging of INFORM API requests/responses
         """
-        self.api_client = InformAPIClient(config)
+        self.api_client = InformAPIClient(config, debug=debug)
         self.home_set_path = home_set_path
         self.principal_path = principal_path
         self.owner_key = owner_key or (config.username if config else None)

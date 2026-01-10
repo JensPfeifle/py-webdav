@@ -43,6 +43,7 @@ class InformCardDAVBackend:
         config: InformConfig | None = None,
         home_set_path: str = "/contacts/",
         principal_path: str = "/principals/current/",
+        debug: bool = False,
     ) -> None:
         """Initialize INFORM CardDAV backend.
 
@@ -50,8 +51,9 @@ class InformCardDAVBackend:
             config: INFORM API configuration (uses default if None)
             home_set_path: Address book home set path
             principal_path: User principal path
+            debug: Enable debug logging of INFORM API requests/responses
         """
-        self.api_client = InformAPIClient(config)
+        self.api_client = InformAPIClient(config, debug=debug)
         self.home_set_path = home_set_path
         self.principal_path = principal_path
         self._company_name: str | None = None
