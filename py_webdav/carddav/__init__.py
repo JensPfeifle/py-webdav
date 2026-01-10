@@ -15,11 +15,13 @@ from .carddav import (
     validate_address_object,
 )
 from .fs_backend import LocalCardDAVBackend
+from .inform_backend import InformCardDAVBackend
 from .server import handle_carddav_propfind
 
 __all__ = [
     "CardDAVBackend",
     "LocalCardDAVBackend",
+    "InformCardDAVBackend",
     "CAPABILITY_ADDRESSBOOK",
     "AddressBook",
     "AddressBookMultiGet",

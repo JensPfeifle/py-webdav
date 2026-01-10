@@ -28,7 +28,6 @@ class ResourceType(IntEnum):
     """CardDAV resource types based on path depth."""
 
     ROOT = 0
-    USER_PRINCIPAL = 1
     ADDRESSBOOK_HOME_SET = 1
     ADDRESSBOOK = 2
     ADDRESS_OBJECT = 3

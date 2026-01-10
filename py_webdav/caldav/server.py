@@ -28,7 +28,6 @@ class ResourceType(IntEnum):
     """CalDAV resource types based on path depth."""
 
     ROOT = 0
-    USER_PRINCIPAL = 1
     CALENDAR_HOME_SET = 1
     CALENDAR = 2
     CALENDAR_OBJECT = 3

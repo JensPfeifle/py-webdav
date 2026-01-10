@@ -52,5 +52,5 @@ def test_validate_address_object_invalid_format():
     """Test that invalid vCard format is rejected."""
     vcard_data = """This is not a valid vCard"""
 
-    with pytest.raises(Exception):  # vobject will raise an exception
+    with pytest.raises(ValueError):
         validate_address_object(vcard_data)
