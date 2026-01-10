@@ -45,7 +45,7 @@ class InformCalDAVBackend:
         self.api_client = InformAPIClient(config)
         self.home_set_path = home_set_path
         self.principal_path = principal_path
-        self.owner_key = owner_key or config.username if config else "OWNER_KEY"
+        self.owner_key = owner_key or (config.username if config else None)
         self._sync_weeks = 2  # Sync 2 weeks before/after current date
 
     async def calendar_home_set_path(self, request: Request) -> str:

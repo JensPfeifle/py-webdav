@@ -95,8 +95,8 @@ Endpoints:
     carddav_backend = None
 
     if args.caldav:
-        from py_webdav.caldav import LocalCalDAVBackend
-        caldav_backend = LocalCalDAVBackend(directory)
+        from py_webdav.caldav import InformCalDAVBackend
+        caldav_backend = InformCalDAVBackend(owner_key="INFO")
 
     if args.carddav:
         from py_webdav.carddav import InformCardDAVBackend
