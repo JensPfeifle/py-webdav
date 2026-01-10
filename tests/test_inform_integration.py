@@ -556,3 +556,355 @@ END:VCALENDAR"""
         assert schema_date["yearlySchemaData"]["regularity"] == "specificDate"
         assert schema_date["yearlySchemaData"]["monthOfYear"] == 1
         assert schema_date["yearlySchemaData"]["dayOfMonth"] == 1
+
+
+class TestInformAPIWorkflows:
+    """Test complete workflows through the INFORM API."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_post_get_workflow(self, api_client):
+        """Test POST (create) → GET workflow."""
+        now = datetime.now(UTC)
+        start_time = now + timedelta(hours=1)
+        end_time = start_time + timedelta(hours=1)
+
+        # POST: Create event
+        event_data = {
+            "eventMode": "single",
+            "subject": "Workflow Test: POST→GET",
+            "ownerKey": api_client.config.username,
+            "startDateTime": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "content": "Testing POST→GET workflow",
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+        assert event_key
+
+        try:
+            # GET: Retrieve event
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+
+            # Verify data matches
+            assert retrieved["key"] == event_key
+            assert retrieved["subject"] == event_data["subject"]
+            assert retrieved["content"] == event_data["content"]
+            assert retrieved["eventMode"] == "single"
+
+        finally:
+            # Cleanup
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_post_get_patch_get_workflow(self, api_client):
+        """Test POST → GET → PATCH → GET workflow."""
+        now = datetime.now(UTC)
+        start_time = now + timedelta(hours=2)
+        end_time = start_time + timedelta(hours=1)
+
+        # POST: Create event
+        event_data = {
+            "eventMode": "single",
+            "subject": "Workflow Test: POST→GET→PATCH→GET",
+            "ownerKey": api_client.config.username,
+            "startDateTime": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+            "content": "Original content",
+            "location": "Original Location",
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # GET: Retrieve original event
+            original = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert original["subject"] == event_data["subject"]
+            assert original["content"] == "Original content"
+            assert original["location"] == "Original Location"
+
+            # PATCH: Update event
+            patch_data = {
+                "subject": "UPDATED Subject",
+                "content": "UPDATED content",
+                "location": "UPDATED Location",
+            }
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # GET: Retrieve updated event
+            updated = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert updated["key"] == event_key
+            assert updated["subject"] == "UPDATED Subject"
+            assert updated["content"] == "UPDATED content"
+            assert updated["location"] == "UPDATED Location"
+
+            # Verify times were preserved
+            assert updated["startDateTime"] == original["startDateTime"]
+            assert updated["endDateTime"] == original["endDateTime"]
+
+        finally:
+            # Cleanup
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_post_get_delete_get_workflow(self, api_client):
+        """Test POST → GET → DELETE → GET workflow."""
+        now = datetime.now(UTC)
+        start_time = now + timedelta(hours=3)
+        end_time = start_time + timedelta(hours=1)
+
+        # POST: Create event
+        event_data = {
+            "eventMode": "single",
+            "subject": "Workflow Test: POST→GET→DELETE→GET",
+            "ownerKey": api_client.config.username,
+            "startDateTime": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        # GET: Verify event exists
+        retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+        assert retrieved["key"] == event_key
+        assert retrieved["subject"] == event_data["subject"]
+
+        # DELETE: Delete event
+        await api_client.delete_calendar_event(event_key)
+
+        # GET: Verify event is deleted (should raise error)
+        with pytest.raises(Exception):
+            await api_client.get_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_post_multiple_get_list_workflow(self, api_client):
+        """Test POST (multiple) → GET (list) workflow."""
+        now = datetime.now(UTC)
+        event_keys = []
+
+        # POST: Create multiple events
+        for i in range(3):
+            start_time = now + timedelta(hours=i + 1)
+            end_time = start_time + timedelta(minutes=30)
+
+            event_data = {
+                "eventMode": "single",
+                "subject": f"Workflow Test: Multi-Event #{i + 1}",
+                "ownerKey": api_client.config.username,
+                "startDateTime": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "endDateTime": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "startDateTimeEnabled": True,
+                "endDateTimeEnabled": True,
+            }
+
+            created = await api_client.create_calendar_event(event_data)
+            event_keys.append(created["key"])
+
+        try:
+            # GET: Retrieve event list
+            start_date = now - timedelta(hours=1)
+            end_date = now + timedelta(hours=10)
+
+            response = await api_client.get_calendar_events_occurrences(
+                owner_key=api_client.config.username,
+                start_datetime=start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                end_datetime=end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
+
+            events = response.get("calendarEvents", [])
+            retrieved_keys = [e["key"] for e in events]
+
+            # Verify all created events are in the list
+            for key in event_keys:
+                assert key in retrieved_keys
+
+        finally:
+            # Cleanup: Delete all created events
+            for key in event_keys:
+                try:
+                    await api_client.delete_calendar_event(key)
+                except Exception:
+                    pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_post_get_patch_times_workflow(self, api_client):
+        """Test POST → GET → PATCH (times) → GET workflow to verify time preservation."""
+        now = datetime.now(UTC)
+        original_start = now.replace(hour=14, minute=30, second=0, microsecond=0)
+        original_end = original_start + timedelta(hours=1)
+
+        # POST: Create event with specific times
+        event_data = {
+            "eventMode": "single",
+            "subject": "Time Preservation Test",
+            "ownerKey": api_client.config.username,
+            "startDateTime": original_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": original_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # GET: Verify times
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert "14:30:00" in retrieved["startDateTime"]
+            assert "15:30:00" in retrieved["endDateTime"]
+
+            # PATCH: Update only subject, not times
+            patch_data = {"subject": "Updated Subject Only"}
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # GET: Verify times still preserved
+            updated = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert updated["subject"] == "Updated Subject Only"
+            assert "14:30:00" in updated["startDateTime"]
+            assert "15:30:00" in updated["endDateTime"]
+
+            # PATCH: Update times
+            new_start = now.replace(hour=16, minute=0, second=0, microsecond=0)
+            new_end = new_start + timedelta(hours=2)
+
+            patch_data = {
+                "startDateTime": new_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "endDateTime": new_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "startDateTimeEnabled": True,
+                "endDateTimeEnabled": True,
+            }
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # GET: Verify new times
+            final = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert "16:00:00" in final["startDateTime"]
+            assert "18:00:00" in final["endDateTime"]
+
+        finally:
+            # Cleanup
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_recurring_event_workflow(self, api_client):
+        """Test POST → GET → PATCH → DELETE workflow for recurring events."""
+        now = datetime.now(UTC)
+        start_date = now.date()
+
+        # POST: Create recurring event (daily for 5 days)
+        event_data = {
+            "eventMode": "serial",
+            "subject": "Recurring Event Workflow Test",
+            "ownerKey": api_client.config.username,
+            "seriesStartDate": start_date.strftime("%Y-%m-%d"),
+            "occurrenceStartTime": 36000,  # 10:00 AM
+            "occurrenceStartTimeEnabled": True,
+            "occurrenceEndTime": 39600,  # 11:00 AM
+            "occurrenceEndTimeEnabled": True,
+            "wholeDayEvent": False,
+            "seriesSchema": {
+                "schemaType": "daily",
+                "dailySchemaData": {"regularity": "interval", "daysInterval": 1},
+            },
+            "seriesEndDate": (start_date + timedelta(days=4)).strftime("%Y-%m-%d"),
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # GET: Retrieve recurring event
+            retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert retrieved["eventMode"] == "serial"
+            assert retrieved["subject"] == event_data["subject"]
+            assert retrieved["occurrenceStartTime"] == 36000
+
+            # PATCH: Update recurring event subject
+            patch_data = {"subject": "UPDATED Recurring Event"}
+            await api_client.update_calendar_event(event_key, patch_data)
+
+            # GET: Verify update
+            updated = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert updated["subject"] == "UPDATED Recurring Event"
+            assert updated["eventMode"] == "serial"
+            assert updated["occurrenceStartTime"] == 36000  # Times preserved
+
+        finally:
+            # DELETE: Clean up
+            await api_client.delete_calendar_event(event_key)
+
+    @pytest.mark.asyncio
+    @pytest.mark.integration
+    async def test_full_lifecycle_workflow(self, api_client):
+        """Test complete event lifecycle: create, read, update multiple times, delete."""
+        now = datetime.now(UTC)
+        start_time = now + timedelta(hours=5)
+        end_time = start_time + timedelta(hours=1)
+
+        # Step 1: CREATE
+        event_data = {
+            "eventMode": "single",
+            "subject": "Lifecycle Test Event",
+            "ownerKey": api_client.config.username,
+            "content": "Version 1",
+            "location": "Location 1",
+            "startDateTime": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "endDateTime": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "startDateTimeEnabled": True,
+            "endDateTimeEnabled": True,
+        }
+
+        created = await api_client.create_calendar_event(event_data)
+        event_key = created["key"]
+
+        try:
+            # Step 2: READ initial version
+            v1 = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert v1["content"] == "Version 1"
+            assert v1["location"] == "Location 1"
+
+            # Step 3: UPDATE content
+            await api_client.update_calendar_event(event_key, {"content": "Version 2"})
+            v2 = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert v2["content"] == "Version 2"
+            assert v2["location"] == "Location 1"  # Unchanged
+
+            # Step 4: UPDATE location
+            await api_client.update_calendar_event(event_key, {"location": "Location 2"})
+            v3 = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert v3["content"] == "Version 2"  # Unchanged
+            assert v3["location"] == "Location 2"
+
+            # Step 5: UPDATE subject
+            await api_client.update_calendar_event(
+                event_key, {"subject": "UPDATED Lifecycle Event"}
+            )
+            v4 = await api_client.get_calendar_event(event_key, fields=["all"])
+            assert v4["subject"] == "UPDATED Lifecycle Event"
+            assert v4["content"] == "Version 2"
+            assert v4["location"] == "Location 2"
+
+            # Verify times preserved through all updates
+            assert v4["startDateTime"] == v1["startDateTime"]
+            assert v4["endDateTime"] == v1["endDateTime"]
+
+        finally:
+            # Step 6: DELETE
+            await api_client.delete_calendar_event(event_key)
+
+            # Verify deletion
+            with pytest.raises(Exception):
+                await api_client.get_calendar_event(event_key)
