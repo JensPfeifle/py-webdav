@@ -84,7 +84,7 @@ class InformAPIClient:
             self._http_client = httpx.AsyncClient(
                 base_url=self.config.base_url,
                 timeout=self.config.timeout,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
         return self._http_client
 
@@ -144,7 +144,7 @@ class InformAPIClient:
                 except Exception:
                     pass
 
-            log_inform_response(response.status_code, response.headers, response_body)
+            log_inform_response(response.status_code, response_body)
 
         response.raise_for_status()
 
@@ -201,7 +201,7 @@ class InformAPIClient:
                 except Exception:
                     pass
 
-            log_inform_response(response.status_code, response.headers, response_body)
+            log_inform_response(response.status_code, response_body)
 
         response.raise_for_status()
 
@@ -295,7 +295,7 @@ class InformAPIClient:
                 except Exception:
                     pass
 
-            log_inform_response(response.status_code, response.headers, response_body)
+            log_inform_response(response.status_code, response_body)
 
         response.raise_for_status()
 

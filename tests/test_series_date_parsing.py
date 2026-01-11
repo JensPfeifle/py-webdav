@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test series start date parsing."""
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 # Simulate what INFORM API returns
 series_start_date_str = "2026-01-10"

@@ -43,6 +43,7 @@ class InformAPITest:
             await self.http_client.aclose()
 
     async def authenticate(self):
+        assert self.http_client
         """Authenticate and get access token."""
         payload = {
             "grantType": "password",
@@ -52,12 +53,11 @@ class InformAPITest:
             "user": self.username,
             "pass": self.password,
         }
-
         response = await self.http_client.post("/token", json=payload)
         response.raise_for_status()
         data = response.json()
         self.access_token = data["accessToken"]
-        print(f"✓ Authenticated successfully")
+        print("✓ Authenticated successfully")
 
     def _get_headers(self):
         """Get headers with authorization."""
@@ -65,6 +65,7 @@ class InformAPITest:
 
     async def create_event(self, event_data):
         """Create a calendar event."""
+        assert self.http_client
         response = await self.http_client.post(
             "/calendarEvents", json=event_data, headers=self._get_headers()
         )
@@ -73,6 +74,7 @@ class InformAPITest:
 
     async def get_event(self, event_key):
         """Get a calendar event with all fields."""
+        assert self.http_client
         response = await self.http_client.get(
             f"/calendarEvents/{event_key}",
             params={"fields": "all"},
@@ -83,6 +85,7 @@ class InformAPITest:
 
     async def patch_event(self, event_key, patch_data):
         """Patch a calendar event."""
+        assert self.http_client
         response = await self.http_client.patch(
             f"/calendarEvents/{event_key}", json=patch_data, headers=self._get_headers()
         )
@@ -91,6 +94,7 @@ class InformAPITest:
 
     async def delete_event(self, event_key):
         """Delete a calendar event."""
+        assert self.http_client
         response = await self.http_client.delete(
             f"/calendarEvents/{event_key}", headers=self._get_headers()
         )
@@ -103,7 +107,7 @@ def print_event_times(event_data, label):
     print(f"  Event Key: {event_data.get('key', 'N/A')}")
     print(f"  Event Mode: {event_data.get('eventMode', 'N/A')}")
 
-    if event_data.get('eventMode') == 'single':
+    if event_data.get("eventMode") == "single":
         print(f"  Start: {event_data.get('startDateTime', 'N/A')}")
         print(f"  End: {event_data.get('endDateTime', 'N/A')}")
         print(f"  Start Enabled: {event_data.get('startDateTimeEnabled', 'N/A')}")
@@ -139,7 +143,7 @@ async def test_empty_patch():
         print("\n" + "=" * 80)
         print("Step 1: Creating event")
         print("=" * 80)
-        print(f"Request payload:")
+        print("Request payload:")
         print(json.dumps(event_data, indent=2))
 
         created = await api.create_event(event_data)
@@ -164,8 +168,8 @@ async def test_empty_patch():
 
         try:
             patched = await api.patch_event(event_key, empty_patch)
-            print(f"\n✓ PATCH request succeeded")
-            print(f"Response:")
+            print("\n✓ PATCH request succeeded")
+            print("Response:")
             print(json.dumps(patched, indent=2))
         except httpx.HTTPStatusError as e:
             print(f"\n✗ PATCH request failed: {e}")

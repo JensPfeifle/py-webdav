@@ -938,11 +938,11 @@ class TestInformAPIAllDayEvents:
         try:
             # Retrieve and verify
             retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
-            
+
             assert retrieved["wholeDayEvent"] is True
             assert retrieved["eventMode"] == "single"
             assert retrieved["subject"] == "All-Day Event Test"
-            
+
             # Check datetime format
             assert f"{today}" in retrieved["startDateTime"]
             assert f"{tomorrow}" in retrieved["endDateTime"]
@@ -955,7 +955,7 @@ class TestInformAPIAllDayEvents:
     async def test_all_day_event_with_date_objects(self, api_client):
         """Test all-day event using date-only format (YYYY-MM-DD)."""
         today = datetime.now(UTC).date()
-        
+
         # Try creating with date strings (no time component)
         event_data = {
             "eventMode": "single",
@@ -973,7 +973,7 @@ class TestInformAPIAllDayEvents:
 
         try:
             retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
-            
+
             assert retrieved["wholeDayEvent"] is True
             assert retrieved["subject"] == "Date-Only All-Day Event"
 
@@ -1003,7 +1003,7 @@ class TestInformAPIAllDayEvents:
 
         try:
             retrieved = await api_client.get_calendar_event(event_key, fields=["all"])
-            
+
             assert retrieved["wholeDayEvent"] is True
             assert f"{start_date}" in retrieved["startDateTime"]
             assert f"{end_date}" in retrieved["endDateTime"]
@@ -1165,7 +1165,7 @@ END:VEVENT
 END:VCALENDAR"""
 
         object_path = f"{calendar_path}test-all-day-{datetime.now(UTC).timestamp()}.ics"
-        
+
         try:
             # Create via CalDAV
             calendar_object = await caldav_backend.put_calendar_object(
@@ -1176,7 +1176,7 @@ END:VCALENDAR"""
             assert calendar_object.data
             assert "CalDAV All-Day Event Test" in calendar_object.data
             assert "DTSTART" in calendar_object.data
-            
+
             # The returned iCal should preserve the all-day nature
             # (dates without time component)
             assert ";VALUE=DATE:" in calendar_object.data or f"{today.strftime('%Y%m%d')}" in calendar_object.data

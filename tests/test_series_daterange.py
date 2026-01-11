@@ -11,7 +11,7 @@ import sys
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
-sys.path.insert(0, '/home/user/py-webdav')
+from icalendar import Calendar as iCalendar
 
 from py_webdav.caldav import InformCalDAVBackend
 
@@ -32,10 +32,10 @@ async def test_series_with_date_ranges():
         series_start = today
         series_end = today + timedelta(days=30)
 
-        print(f"\nCreating series event:")
+        print("\nCreating series event:")
         print(f"  Start: {series_start}")
         print(f"  End: {series_end}")
-        print(f"  Frequency: Daily")
+        print("  Frequency: Daily")
 
         ical_create = f"""BEGIN:VCALENDAR
 VERSION:2.0
@@ -43,9 +43,9 @@ PRODID:-//Test//Test//EN
 BEGIN:VEVENT
 UID:test-daterange-{today}
 SUMMARY:Daily Standup
-DTSTART:{series_start.strftime('%Y%m%d')}T090000Z
-DTEND:{series_start.strftime('%Y%m%d')}T093000Z
-RRULE:FREQ=DAILY;INTERVAL=1;UNTIL={series_end.strftime('%Y%m%d')}T235959Z
+DTSTART:{series_start.strftime("%Y%m%d")}T090000Z
+DTEND:{series_start.strftime("%Y%m%d")}T093000Z
+RRULE:FREQ=DAILY;INTERVAL=1;UNTIL={series_end.strftime("%Y%m%d")}T235959Z
 END:VEVENT
 END:VCALENDAR"""
 
@@ -79,11 +79,10 @@ END:VCALENDAR"""
                 break
 
         if our_event1:
-            from icalendar import Calendar as iCalendar
             cal = iCalendar.from_ical(our_event1.data)
             for component in cal.walk():
                 if component.name == "VEVENT":
-                    rrule = component.get('rrule')
+                    rrule = component.get("rrule")
                     print(f"✓ RRULE present: {rrule is not None}")
                     if not rrule:
                         print("❌ RRULE missing!")
@@ -95,8 +94,12 @@ END:VCALENDAR"""
         print("=" * 80)
 
         def get_partial_range():
-            start = datetime.combine(series_start + timedelta(days=10), datetime.min.time()).replace(tzinfo=UTC)
-            end = datetime.combine(series_start + timedelta(days=20), datetime.max.time()).replace(tzinfo=UTC)
+            start = datetime.combine(
+                series_start + timedelta(days=10), datetime.min.time()
+            ).replace(tzinfo=UTC)
+            end = datetime.combine(series_start + timedelta(days=20), datetime.max.time()).replace(
+                tzinfo=UTC
+            )
             print(f"  Query range: {start.date()} to {end.date()}")
             return (start, end)
 
@@ -113,13 +116,15 @@ END:VCALENDAR"""
             cal2 = iCalendar.from_ical(our_event2.data)
             for component in cal2.walk():
                 if component.name == "VEVENT":
-                    rrule2 = component.get('rrule')
+                    rrule2 = component.get("rrule")
                     print(f"✓ RRULE present: {rrule2 is not None}")
                     if rrule2:
                         print(f"  RRULE: {rrule2}")
                     else:
                         print("❌ RRULE missing in partial range!")
-                        print("This could be the bug - series info lost when querying partial range")
+                        print(
+                            "This could be the bug - series info lost when querying partial range"
+                        )
                         return False
         else:
             print("❌ Event not found in partial range!")
@@ -131,8 +136,12 @@ END:VCALENDAR"""
         print("=" * 80)
 
         def get_future_range():
-            start = datetime.combine(series_start + timedelta(days=20), datetime.min.time()).replace(tzinfo=UTC)
-            end = datetime.combine(series_start + timedelta(days=30), datetime.max.time()).replace(tzinfo=UTC)
+            start = datetime.combine(
+                series_start + timedelta(days=20), datetime.min.time()
+            ).replace(tzinfo=UTC)
+            end = datetime.combine(series_start + timedelta(days=30), datetime.max.time()).replace(
+                tzinfo=UTC
+            )
             print(f"  Query range: {start.date()} to {end.date()}")
             return (start, end)
 
@@ -149,7 +158,7 @@ END:VCALENDAR"""
             cal3 = iCalendar.from_ical(our_event3.data)
             for component in cal3.walk():
                 if component.name == "VEVENT":
-                    rrule3 = component.get('rrule')
+                    rrule3 = component.get("rrule")
                     print(f"✓ RRULE present: {rrule3 is not None}")
                     if rrule3:
                         print(f"  RRULE: {rrule3}")
@@ -171,7 +180,7 @@ END:VCALENDAR"""
         cal4 = iCalendar.from_ical(direct.data)
         for component in cal4.walk():
             if component.name == "VEVENT":
-                rrule4 = component.get('rrule')
+                rrule4 = component.get("rrule")
                 print(f"✓ RRULE present: {rrule4 is not None}")
                 if not rrule4:
                     print("❌ RRULE missing even in direct GET!")
@@ -186,6 +195,7 @@ END:VCALENDAR"""
     except Exception as e:
         print(f"\n❌ Error: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:

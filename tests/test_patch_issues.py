@@ -101,7 +101,7 @@ async def test_time_issue():
         start_time = now.replace(hour=14, minute=30, second=0, microsecond=0)
         end_time = start_time + timedelta(hours=1)
 
-        print(f"\nCreating event with times:")
+        print("\nCreating event with times:")
         print(f"  Start: {start_time.isoformat()} (14:30:00)")
         print(f"  End:   {end_time.isoformat()} (15:30:00)")
 
@@ -117,12 +117,12 @@ async def test_time_issue():
             "wholeDayEvent": False,
         }
 
-        print(f"\nCreating event with wholeDayEvent=False...")
+        print("\nCreating event with wholeDayEvent=False...")
         created = await api.create_event(event_data)
         event_key = created["key"]
 
         fetched = await api.get_event(event_key)
-        print(f"\nRetrieved event:")
+        print("\nRetrieved event:")
         print(f"  Start: {fetched.get('startDateTime')} (expected 14:30:00)")
         print(f"  End:   {fetched.get('endDateTime')} (expected 15:30:00)")
         print(f"  wholeDayEvent: {fetched.get('wholeDayEvent')}")
@@ -161,20 +161,20 @@ async def test_minimal_patch():
         print(f"Created event: {event_key}")
 
         original = await api.get_event(event_key)
-        print(f"\nOriginal event:")
+        print("\nOriginal event:")
         print(f"  Subject: {original.get('subject')}")
         print(f"  Start: {original.get('startDateTime')}")
         print(f"  End: {original.get('endDateTime')}")
 
         # Test 2a: PATCH with eventMode only
-        print(f"\n--- Test 2a: PATCH with eventMode='single' ---")
+        print("\n--- Test 2a: PATCH with eventMode='single' ---")
         try:
             patch_data = {"eventMode": "single"}
             print(f"PATCH payload: {json.dumps(patch_data)}")
             await api.patch_event(event_key, patch_data)
 
             updated = await api.get_event(event_key)
-            print(f"After PATCH:")
+            print("After PATCH:")
             print(f"  Subject: {updated.get('subject')}")
             print(f"  Start: {updated.get('startDateTime')}")
             print(f"  End: {updated.get('endDateTime')}")
@@ -187,14 +187,14 @@ async def test_minimal_patch():
             print(f"✗ PATCH failed: {e}")
 
         # Test 2b: PATCH with subject change
-        print(f"\n--- Test 2b: PATCH with subject change ---")
+        print("\n--- Test 2b: PATCH with subject change ---")
         try:
             patch_data = {"subject": "Updated Subject"}
             print(f"PATCH payload: {json.dumps(patch_data)}")
             await api.patch_event(event_key, patch_data)
 
             updated = await api.get_event(event_key)
-            print(f"After PATCH:")
+            print("After PATCH:")
             print(f"  Subject: {updated.get('subject')}")
             print(f"  Start: {updated.get('startDateTime')}")
             print(f"  End: {updated.get('endDateTime')}")
@@ -243,7 +243,7 @@ async def test_caldav_scenario():
 
         # Step 2: Update via CalDAV (client sends full event)
         # In CalDAV backend, we convert iCal to INFORM format and PATCH
-        print(f"\nStep 2: Update event (changing only description)")
+        print("\nStep 2: Update event (changing only description)")
         print("CalDAV client sends full iCal, backend converts and PATCHes")
 
         # What CalDAV backend might send as PATCH
@@ -257,14 +257,14 @@ async def test_caldav_scenario():
             "endDateTimeEnabled": True,
         }
 
-        print(f"\nPATCH payload (CalDAV-style):")
+        print("\nPATCH payload (CalDAV-style):")
         print(json.dumps(patch_data, indent=2))
 
         try:
             await api.patch_event(event_key, patch_data)
             updated = await api.get_event(event_key)
 
-            print(f"\nAfter CalDAV update:")
+            print("\nAfter CalDAV update:")
             print(f"  Subject: {updated.get('subject')}")
             print(f"  Content: {updated.get('content')}")
             print(f"  Start: {updated.get('startDateTime')}")

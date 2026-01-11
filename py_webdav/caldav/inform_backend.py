@@ -47,7 +47,7 @@ class InformCalDAVBackend:
         self.api_client = InformAPIClient(config, debug=debug)
         self.home_set_path = home_set_path
         self.principal_path = principal_path
-        self.owner_key = owner_key or (config.username if config else None)
+        self.owner_key = owner_key or (config.username if config else "")
         self._sync_weeks = 2  # Sync 2 weeks before/after current date
 
     async def calendar_home_set_path(self, request: Request) -> str:
@@ -118,9 +118,7 @@ class InformCalDAVBackend:
 
         return event_key
 
-    def _inform_series_schema_to_rrule(
-        self, series_schema: dict[str, Any]
-    ) -> str | None:
+    def _inform_series_schema_to_rrule(self, series_schema: dict[str, Any]) -> str | None:
         """Convert INFORM seriesSchema to iCalendar RRULE.
 
         Args:
@@ -158,7 +156,7 @@ class InformCalDAVBackend:
                 "saturday": "SA",
                 "sunday": "SU",
             }
-            byday = ",".join(day_map.get(d, d.upper()[:2]) for d in weekdays)
+            byday = ",".join(day_map.get(d, d.upper()[:2]) for d in weekdays)  # type: ignore
 
             if interval == 1:
                 return f"FREQ=WEEKLY;BYDAY={byday}"
@@ -313,9 +311,7 @@ class InformCalDAVBackend:
                 if whole_day:
                     event.add("dtstart", series_start_date.date())
                 else:
-                    start_dt = series_start_date.replace(
-                        hour=hours, minute=minutes, tzinfo=UTC
-                    )
+                    start_dt = series_start_date.replace(hour=hours, minute=minutes, tzinfo=UTC)
                     event.add("dtstart", start_dt)
 
                 # Calculate end time for recurring events
@@ -378,6 +374,7 @@ class InformCalDAVBackend:
 
         if event_mode == "serial" and series_schema:
             import json
+
             debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
             debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
             debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
@@ -519,9 +516,7 @@ class InformCalDAVBackend:
                     event_data["endDateTime"] = self._format_datetime_for_inform(dtend)
                     event_data["endDateTimeEnabled"] = True
                 else:
-                    dt = datetime.combine(dtend, datetime.min.time()).replace(
-                        tzinfo=UTC
-                    )
+                    dt = datetime.combine(dtend, datetime.min.time()).replace(tzinfo=UTC)
                     event_data["endDateTime"] = self._format_datetime_for_inform(dt)
                     event_data["endDateTimeEnabled"] = True
 
@@ -921,9 +916,7 @@ class InformCalDAVBackend:
         try:
             if event_exists:
                 # Update existing event
-                _updated_event = await self.api_client.update_calendar_event(
-                    event_key, event_data
-                )
+                _updated_event = await self.api_client.update_calendar_event(event_key, event_data)
             else:
                 # Create new event
                 # Note: INFORM API auto-generates keys, so we can't use the path key

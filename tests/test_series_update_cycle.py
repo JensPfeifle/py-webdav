@@ -103,7 +103,7 @@ END:VCALENDAR"""
 
         updated = await backend.put_calendar_object(request, created.path, ical_update)
 
-        print(f"\n✓ Updated event")
+        print("\n✓ Updated event")
 
         # Step 4: Retrieve again (resync)
         print("\n\n4. SYNC 2: Retrieving event after update (resync)")

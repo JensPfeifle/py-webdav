@@ -12,8 +12,8 @@ from datetime import UTC, datetime, timedelta
 
 sys.path.insert(0, '/home/user/py-webdav')
 
-from py_webdav.inform_api_client import InformAPIClient, InformConfig
 from py_webdav.caldav import InformCalDAVBackend
+from py_webdav.inform_api_client import InformAPIClient, InformConfig
 
 
 async def diagnose():

@@ -12,7 +12,6 @@ from unittest.mock import Mock
 sys.path.insert(0, '/home/user/py-webdav')
 
 from py_webdav.caldav import InformCalDAVBackend
-from py_webdav.caldav.caldav import CalendarQuery, CompFilter
 
 
 async def test_calendar_query():
@@ -42,9 +41,9 @@ END:VEVENT
 END:VCALENDAR"""
 
         print("\n1. Creating weekly recurring event:")
-        print(f"   - Occurs on Monday, Wednesday, Friday")
+        print("   - Occurs on Monday, Wednesday, Friday")
         print(f"   - From {start_date} to {end_date}")
-        print(f"   - Should have ~13 occurrences")
+        print("   - Should have ~13 occurrences")
 
         # Create via CalDAV
         calendar_path = "/calendars/INFO/default/"
@@ -79,7 +78,7 @@ END:VCALENDAR"""
                         if rrule:
                             print(f"✅ RRULE present: {rrule}")
                         else:
-                            print(f"❌ RRULE missing!")
+                            print("❌ RRULE missing!")
 
         # Cleanup
         await backend.delete_calendar_object(request, created_obj.path)

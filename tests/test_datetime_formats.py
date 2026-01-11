@@ -2,7 +2,6 @@
 """Test different datetime formats to find what INFORM API expects."""
 
 import asyncio
-import json
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -32,6 +31,7 @@ class InformAPITest:
             await self.http_client.aclose()
 
     async def authenticate(self):
+        assert self.http_client
         payload = {
             "grantType": "password",
             "clientId": self.client_id,
@@ -49,6 +49,7 @@ class InformAPITest:
         return {"Authorization": f"Bearer {self.access_token}"}
 
     async def create_event(self, event_data):
+        assert self.http_client
         response = await self.http_client.post(
             "/calendarEvents", json=event_data, headers=self._get_headers()
         )
@@ -56,6 +57,7 @@ class InformAPITest:
         return response.json()
 
     async def get_event(self, event_key):
+        assert self.http_client
         response = await self.http_client.get(
             f"/calendarEvents/{event_key}",
             params={"fields": "all"},
@@ -65,6 +67,7 @@ class InformAPITest:
         return response.json()
 
     async def delete_event(self, event_key):
+        assert self.http_client
         response = await self.http_client.delete(
             f"/calendarEvents/{event_key}", headers=self._get_headers()
         )
@@ -98,7 +101,7 @@ async def test_datetime_format(api, format_name, start_str, end_str):
         result_start = fetched.get("startDateTime")
         result_end = fetched.get("endDateTime")
 
-        print(f"\nResult:")
+        print("\nResult:")
         print(f"  Start: {result_start}")
         print(f"  End:   {result_end}")
 

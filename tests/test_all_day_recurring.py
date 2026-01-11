@@ -3,11 +3,7 @@
 
 import asyncio
 import json
-import os
-import sys
 from datetime import UTC, datetime, timedelta
-
-sys.path.insert(0, '/home/user/py-webdav')
 
 from py_webdav.inform_api_client import InformAPIClient, InformConfig
 
@@ -41,11 +37,11 @@ async def test():
         try:
             created = await client.create_calendar_event(event_data_no_times)
             print(f"\n✓ Success! Created event: {created['key']}")
-            await client.delete_calendar_event(created['key'])
+            await client.delete_calendar_event(created["key"])
         except Exception as e:
             print(f"\n✗ Failed: {e}")
-            if hasattr(e, 'response'):
-                print(f"Response: {e.response.text}")
+            if hasattr(e, "response"):
+                print(f"Response: {e.response.text}")  # type: ignore
 
         # Test 2: With time fields
         event_data_with_times = {
@@ -72,12 +68,12 @@ async def test():
         print(f"\nSuccess! Created event: {created['key']}")
 
         # Cleanup
-        await client.delete_calendar_event(created['key'])
+        await client.delete_calendar_event(created["key"])
 
     except Exception as e:
         print(f"\nError: {e}")
-        if hasattr(e, 'response'):
-            print(f"Response: {e.response.text}")
+        if hasattr(e, "response"):
+            print(f"Response: {e.response.text}")  # type: ignore
     finally:
         await client.close()
 
