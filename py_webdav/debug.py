@@ -172,7 +172,7 @@ def log_inform_request(method: str, url: str, headers: dict[str, Any], body: Any
     inform_logger.info(json.dumps(request_data, indent=2, ensure_ascii=False))
 
 
-def log_inform_response(status_code: int, headers: dict[str, Any], body: Any) -> None:
+def log_inform_response(status_code: int, body: Any) -> None:
     """Log an incoming INFORM API response in JSON format.
 
     Args:
@@ -183,7 +183,6 @@ def log_inform_response(status_code: int, headers: dict[str, Any], body: Any) ->
     response_data = {
         "type": "response",
         "status_code": status_code,
-        "headers": dict(headers),
     }
 
     if body is not None:
