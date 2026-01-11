@@ -12,6 +12,7 @@ from hashlib import md5
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from dateutil.rrule import rrulestr
 from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
 from starlette.requests import Request
@@ -270,6 +271,36 @@ class InformCalDAVBackend:
 
         return None
 
+    def _calculate_first_occurrence(
+        self, series_start_dt: datetime, rrule_str: str
+    ) -> datetime:
+        """Calculate the first occurrence matching the RRULE.
+
+        INFORM's seriesStartDate may not match the first actual occurrence if the
+        RRULE has constraints (e.g., BYDAY=MO,TU,WE,TH,FR excludes weekends).
+        This method finds the first occurrence that matches the RRULE.
+
+        Args:
+            series_start_dt: Series start datetime
+            rrule_str: RRULE string (e.g., "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+
+        Returns:
+            First occurrence datetime that matches the RRULE
+        """
+        try:
+            # Build RRULE string for dateutil
+            dtstart_str = series_start_dt.strftime('%Y%m%dT%H%M%SZ')
+            rrule_full = f"DTSTART:{dtstart_str}\nRRULE:{rrule_str}"
+
+            # Parse and get first occurrence
+            rule = rrulestr(rrule_full)
+            first_occ = rule[0] if rule else series_start_dt
+
+            return first_occ
+        except Exception:
+            # If parsing fails, fall back to series start date
+            return series_start_dt
+
     def _inform_event_to_ical(self, event_data: dict[str, Any]) -> str:
         """Convert INFORM calendar event to iCalendar format.
 
@@ -338,12 +369,28 @@ class InformCalDAVBackend:
             occ_end_time = event_data.get("occurrenceEndTime", 0)
             whole_day = event_data.get("wholeDayEvent", False)
 
+            # Generate RRULE first (needed to calculate correct first occurrence)
+            series_schema = event_data.get("seriesSchema", {})
+            rrule_str = self._inform_series_schema_to_rrule(series_schema)
+
             # Convert series start date + occurrence time to datetime
             if series_start_date_str:
                 if whole_day:
                     series_start_date = datetime.fromisoformat(series_start_date_str)
-                    event.add("dtstart", series_start_date.date())
-                    event.add("dtend", series_start_date.date())
+                    # For whole-day events, calculate first occurrence matching RRULE
+                    if rrule_str:
+                        # Convert to datetime for RRULE calculation
+                        series_start_dt = datetime.combine(
+                            series_start_date.date(), datetime.min.time()
+                        ).replace(tzinfo=UTC)
+                        first_occ_dt = self._calculate_first_occurrence(
+                            series_start_dt, rrule_str
+                        )
+                        event.add("dtstart", first_occ_dt.date())
+                        event.add("dtend", first_occ_dt.date())
+                    else:
+                        event.add("dtstart", series_start_date.date())
+                        event.add("dtend", series_start_date.date())
                 else:
                     # Convert occurrence times from server local timezone to UTC
                     start_dt = self._occurrence_time_to_utc(
@@ -352,12 +399,21 @@ class InformCalDAVBackend:
                     end_dt = self._occurrence_time_to_utc(
                         series_start_date_str, occ_end_time
                     )
-                    event.add("dtstart", start_dt)
-                    event.add("dtend", end_dt)
+
+                    # Calculate first occurrence matching RRULE
+                    if rrule_str:
+                        first_occ_dt = self._calculate_first_occurrence(start_dt, rrule_str)
+                        # Calculate duration to apply to first occurrence
+                        duration = end_dt - start_dt
+                        first_occ_end = first_occ_dt + duration
+
+                        event.add("dtstart", first_occ_dt)
+                        event.add("dtend", first_occ_end)
+                    else:
+                        event.add("dtstart", start_dt)
+                        event.add("dtend", end_dt)
 
             # Add recurrence rule
-            series_schema = event_data.get("seriesSchema", {})
-            rrule_str = self._inform_series_schema_to_rrule(series_schema)
             if rrule_str:
                 event.add("rrule", rrule_str)
 
@@ -406,10 +462,15 @@ class InformCalDAVBackend:
             debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
             debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
 
-            # Add the generated RRULE if it exists in the event
+            # Add the generated RRULE string (convert vRecur object to string if present)
             if "rrule" in event:
                 rrule_value = event.get("rrule")
-                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_value}")
+                # Convert vRecur to clean string format
+                if hasattr(rrule_value, 'to_ical'):
+                    rrule_str_debug = rrule_value.to_ical().decode('utf-8')
+                else:
+                    rrule_str_debug = str(rrule_value)
+                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_str_debug}")
 
         # Combine original content with debug info
         if content:

@@ -10,6 +10,7 @@ Each entry follows the IST (actual)/SOLL (expected) format.
 3. [Empty PATCH Requests](#3-empty-patch-requests)
 4. [Series Event Occurrences Missing Schema](#4-series-event-occurrences-missing-schema)
 5. [Occurrence Times in Server Local Timezone](#5-occurrence-times-in-server-local-timezone)
+6. [Series Start Date vs First Occurrence](#6-series-start-date-vs-first-occurrence)
 
 ---
 
@@ -418,6 +419,67 @@ Or configure in code:
 ```python
 config = InformConfig(server_timezone="Europe/Berlin")
 ```
+
+---
+
+## 6. Series Start Date vs First Occurrence
+
+### IST (Actual Behavior)
+
+The `seriesStartDate` field may not match the first actual occurrence when the `seriesSchema` has day-of-week constraints.
+
+**Example:**
+```json
+{
+  "seriesStartDate": "2026-01-10",  // Saturday
+  "seriesSchema": {
+    "schemaType": "weekly",
+    "weeklySchemaData": {
+      "weekdays": ["monday", "tuesday", "wednesday", "thursday", "friday"]
+    }
+  }
+}
+```
+
+When you query `/calendarEventsOccurrences`, the first actual occurrence is Monday, January 12, 2026 (not Saturday, January 10).
+
+### SOLL (Expected Behavior)
+
+The `seriesStartDate` should be the date of the first occurrence, or the API should provide a `firstOccurrenceDate` field.
+
+### Impact
+
+For CalDAV, the iCalendar `DTSTART` property **must** be the first actual occurrence, not the series start date. Per RFC 5545, DTSTART defines the first instance of a recurrence.
+
+If DTSTART is set to a date that doesn't match the BYDAY constraint, different CalDAV clients may interpret the recurrence differently:
+- Some skip to the next matching day
+- Some treat DTSTART as the first occurrence regardless of BYDAY
+- Some show incorrect occurrence dates
+
+### Workaround
+
+Calculate the first occurrence by:
+1. Generate the RRULE from `seriesSchema`
+2. Use `dateutil.rrule.rrulestr` to compute the first occurrence
+3. Set DTSTART to this calculated first occurrence
+
+**Example Implementation:**
+```python
+from dateutil.rrule import rrulestr
+
+def calculate_first_occurrence(series_start_dt, rrule_str):
+    """Calculate first occurrence matching the RRULE."""
+    dtstart_str = series_start_dt.strftime('%Y%m%dT%H%M%SZ')
+    rrule_full = f"DTSTART:{dtstart_str}\nRRULE:{rrule_str}"
+    rule = rrulestr(rrule_full)
+    return rule[0]  # First occurrence
+
+# seriesStartDate: 2026-01-10 (Saturday)
+# RRULE: FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR
+# Calculated first occurrence: 2026-01-12 (Monday) ✓
+```
+
+**Location in code:** `py_webdav/caldav/inform_backend.py:274-302` (`_calculate_first_occurrence` method)
 
 ---
 
