@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import md5
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
@@ -94,6 +95,41 @@ class InformCalDAVBackend:
 
         # Format without microseconds, with Z suffix
         return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _occurrence_time_to_utc(
+        self, date_str: str, seconds_from_midnight: float
+    ) -> datetime:
+        """Convert INFORM occurrence time to UTC datetime.
+
+        INFORM API returns occurrenceStartTime/occurrenceEndTime as seconds from
+        midnight in the server's LOCAL timezone (not UTC). This method converts
+        those times to proper UTC datetimes.
+
+        Args:
+            date_str: Date string in ISO format (YYYY-MM-DD)
+            seconds_from_midnight: Seconds from midnight in server's local timezone
+
+        Returns:
+            UTC datetime object
+        """
+        # Parse the date
+        date = datetime.fromisoformat(date_str).date()
+
+        # Calculate hours and minutes
+        hours = int(seconds_from_midnight // 3600)
+        minutes = int((seconds_from_midnight % 3600) // 60)
+        seconds = int(seconds_from_midnight % 60)
+
+        # Create datetime in server's local timezone
+        server_tz = ZoneInfo(self.api_client.config.server_timezone)
+        local_dt = datetime.combine(date, datetime.min.time()).replace(
+            hour=hours, minute=minutes, second=seconds, tzinfo=server_tz
+        )
+
+        # Convert to UTC
+        utc_dt = local_dt.astimezone(UTC)
+
+        return utc_dt
 
     def _parse_object_path(self, path: str) -> str:
         """Parse object path to extract event key.
@@ -304,29 +340,20 @@ class InformCalDAVBackend:
 
             # Convert series start date + occurrence time to datetime
             if series_start_date_str:
-                series_start_date = datetime.fromisoformat(series_start_date_str)
-                hours = int(occ_start_time // 3600)
-                minutes = int((occ_start_time % 3600) // 60)
-
                 if whole_day:
+                    series_start_date = datetime.fromisoformat(series_start_date_str)
                     event.add("dtstart", series_start_date.date())
-                else:
-                    start_dt = series_start_date.replace(hour=hours, minute=minutes, tzinfo=UTC)
-                    event.add("dtstart", start_dt)
-
-                # Calculate end time for recurring events
-                # Duration for reference (currently unused)
-                _duration_secs = occ_end_time - occ_start_time
-                if not whole_day:
-                    end_hours = int(occ_end_time // 3600)
-                    end_minutes = int((occ_end_time % 3600) // 60)
-                    end_dt = series_start_date.replace(
-                        hour=end_hours, minute=end_minutes, tzinfo=UTC
-                    )
-                    event.add("dtend", end_dt)
-                else:
-                    # For all-day events, use date
                     event.add("dtend", series_start_date.date())
+                else:
+                    # Convert occurrence times from server local timezone to UTC
+                    start_dt = self._occurrence_time_to_utc(
+                        series_start_date_str, occ_start_time
+                    )
+                    end_dt = self._occurrence_time_to_utc(
+                        series_start_date_str, occ_end_time
+                    )
+                    event.add("dtstart", start_dt)
+                    event.add("dtend", end_dt)
 
             # Add recurrence rule
             series_schema = event_data.get("seriesSchema", {})

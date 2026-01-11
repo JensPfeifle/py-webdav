@@ -19,6 +19,7 @@ services:
       - INFORM_LICENSE=${INFORM_LICENSE}
       - INFORM_USER=${INFORM_USER}
       - INFORM_PASSWORD=${INFORM_PASSWORD}
+      - INFORM_TIMEZONE=${INFORM_TIMEZONE:-Europe/Berlin}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8080', method='OPTIONS'); urllib.request.urlopen(req)"]

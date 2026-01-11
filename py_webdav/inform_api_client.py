@@ -21,6 +21,7 @@ INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET", "").strip('"')
 INFORM_LICENSE = os.getenv("INFORM_LICENSE", "").strip('"')
 INFORM_USER = os.getenv("INFORM_USER", "").strip('"')
 INFORM_PASSWORD = os.getenv("INFORM_PASSWORD", "").strip('"')
+INFORM_TIMEZONE = os.getenv("INFORM_TIMEZONE", "Europe/Berlin").strip('"')
 
 
 @dataclass
@@ -42,6 +43,11 @@ class InformConfig:
     # API configuration
     base_url: str = "https://testapi.in-software.com/v1"
     timeout: float = 30.0  # Request timeout in seconds
+
+    # Server timezone for occurrence time conversion
+    # INFORM API returns occurrenceStartTime/occurrenceEndTime in seconds from
+    # midnight in the server's local timezone, not UTC
+    server_timezone: str = INFORM_TIMEZONE or "Europe/Berlin"
 
 
 @dataclass

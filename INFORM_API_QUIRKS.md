@@ -9,6 +9,7 @@ Each entry follows the IST (actual)/SOLL (expected) format.
 2. [DateTime Format Strictness](#2-datetime-format-strictness)
 3. [Empty PATCH Requests](#3-empty-patch-requests)
 4. [Series Event Occurrences Missing Schema](#4-series-event-occurrences-missing-schema)
+5. [Occurrence Times in Server Local Timezone](#5-occurrence-times-in-server-local-timezone)
 
 ---
 
@@ -289,6 +290,134 @@ for event_data in occurrences_response["calendarEvents"]:
 For CalDAV sync with 100 occurrences of 10 different series events:
 - Without optimization: 1 + 100 = **101 API calls**
 - With deduplication: 1 + 10 = **11 API calls** (tracking unique event keys)
+
+---
+
+## 5. Occurrence Times in Server Local Timezone
+
+### IST (Actual Behavior)
+
+The INFORM API returns `occurrenceStartTime` and `occurrenceEndTime` for series (recurring) events as **seconds from midnight in the server's local timezone**, NOT in UTC.
+
+**Example Response:**
+```json
+{
+  "key": "74006800000000",
+  "eventMode": "serial",
+  "subject": "Bouldern",
+  "seriesStartDate": "2026-01-10",
+  "seriesEndDate": "2026-01-17",
+  "occurrenceStartTime": 57600.0,  // 16:00 in server local time (Europe/Berlin)
+  "occurrenceEndTime": 61200.0,    // 17:00 in server local time (Europe/Berlin)
+  "wholeDayEvent": false,
+  "seriesSchema": { ... }
+}
+```
+
+**Conversion Example (Europe/Berlin timezone):**
+- `occurrenceStartTime: 57600` = 57600 seconds / 3600 = **16:00 hours**
+- In January (CET = UTC+1): 16:00 local = **15:00 UTC**
+- In July (CEST = UTC+2): 16:00 local = **14:00 UTC**
+
+If you naively interpret these as UTC times, events will appear 1-2 hours later than intended:
+- Event scheduled for 16:00 local shows as 17:00 local (wrong!)
+
+### SOLL (Expected Behavior)
+
+Occurrence times should be returned in a consistent, documented timezone:
+
+**Option 1: UTC (preferred):**
+- Return `occurrenceStartTime`/`occurrenceEndTime` as seconds from midnight UTC
+- Or provide separate `occurrenceStartDateTime`/`occurrenceEndDateTime` in ISO 8601 format with timezone
+
+**Option 2: Explicit timezone:**
+- Include a `timezone` field indicating what timezone the occurrence times are in
+- e.g., `"timezone": "Europe/Berlin"`
+
+**Option 3: Clear documentation:**
+- Clearly document that occurrence times are in server local timezone
+- Document what that timezone is (or provide an API to query it)
+
+### Workaround
+
+1. **Know the server timezone** - Find out what timezone the INFORM server is using (e.g., "Europe/Berlin")
+
+2. **Convert to UTC when reading:**
+```python
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+def occurrence_time_to_utc(date_str: str, seconds_from_midnight: float, server_tz: str) -> datetime:
+    """Convert occurrence time to UTC.
+
+    Args:
+        date_str: Date in ISO format (YYYY-MM-DD)
+        seconds_from_midnight: Seconds from midnight in server timezone
+        server_tz: Server timezone (e.g., 'Europe/Berlin')
+
+    Returns:
+        UTC datetime
+    """
+    date = datetime.fromisoformat(date_str).date()
+    hours = int(seconds_from_midnight // 3600)
+    minutes = int((seconds_from_midnight % 3600) // 60)
+    seconds = int(seconds_from_midnight % 60)
+
+    # Create in server timezone
+    local_dt = datetime.combine(date, datetime.min.time()).replace(
+        hour=hours, minute=minutes, second=seconds,
+        tzinfo=ZoneInfo(server_tz)
+    )
+
+    # Convert to UTC
+    return local_dt.astimezone(UTC)
+
+# Usage
+start_utc = occurrence_time_to_utc("2026-01-10", 57600.0, "Europe/Berlin")
+# Result: 2026-01-10 15:00:00 UTC (not 16:00 UTC!)
+```
+
+3. **Convert from UTC when writing:**
+```python
+def utc_to_occurrence_time(dt: datetime, server_tz: str) -> float:
+    """Convert UTC datetime to occurrence time.
+
+    Args:
+        dt: UTC datetime
+        server_tz: Server timezone (e.g., 'Europe/Berlin')
+
+    Returns:
+        Seconds from midnight in server timezone
+    """
+    # Convert to server timezone
+    local_dt = dt.astimezone(ZoneInfo(server_tz))
+
+    # Calculate seconds from midnight
+    seconds = (local_dt.hour * 3600 +
+               local_dt.minute * 60 +
+               local_dt.second)
+    return seconds
+```
+
+### Impact
+
+- **Critical for CalDAV implementations** - Times must be converted correctly or all recurring events will show wrong times
+- **Timezone-dependent bugs** - Bugs only appear when server timezone differs from UTC or client timezone
+- **DST complications** - Different offsets in summer vs winter (CET vs CEST)
+- **Configuration required** - CalDAV implementations must know and configure the server timezone
+- **Silent data corruption** - Wrong times are plausible, making bugs hard to detect
+
+### Configuration
+
+Set the `INFORM_TIMEZONE` environment variable:
+```bash
+INFORM_TIMEZONE=Europe/Berlin
+```
+
+Or configure in code:
+```python
+config = InformConfig(server_timezone="Europe/Berlin")
+```
 
 ---
 
