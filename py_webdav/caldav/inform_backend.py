@@ -301,6 +301,52 @@ class InformCalDAVBackend:
             # If parsing fails, fall back to series start date
             return series_start_dt
 
+    async def _update_occurrence(
+        self, event_key: str, occurrence_id: str, ical_data: str, path: str
+    ) -> CalendarObject:
+        """Update a specific occurrence of a series event.
+
+        Args:
+            event_key: Event key
+            occurrence_id: Occurrence ID
+            ical_data: iCalendar data with updated event
+            path: CalDAV object path
+
+        Returns:
+            Updated CalendarObject
+        """
+        # Convert iCalendar to INFORM format
+        try:
+            event_data = self._ical_to_inform_event(ical_data)
+        except Exception as e:
+            raise HTTPError(400, Exception(f"Invalid iCalendar data: {e}")) from e
+
+        # Update the occurrence via API
+        try:
+            await self.api_client.update_calendar_event_occurrence(
+                event_key, occurrence_id, event_data
+            )
+
+            # Fetch the updated occurrence
+            updated_occurrence = await self.api_client.get_calendar_event_occurrence(
+                event_key, occurrence_id, fields=["all"]
+            )
+
+            # Convert back to iCalendar
+            result_ical = self._inform_occurrence_to_ical(updated_occurrence)
+            etag = md5(result_ical.encode()).hexdigest()
+
+            return CalendarObject(
+                path=path,
+                data=result_ical,
+                mod_time=datetime.now(UTC),
+                content_length=len(result_ical.encode()),
+                etag=etag,
+            )
+
+        except Exception as e:
+            raise HTTPError(500, Exception(f"Failed to update occurrence: {e}")) from e
+
     def _inform_occurrence_to_ical(self, event_data: dict[str, Any]) -> str:
         """Convert INFORM event occurrence to iCalendar single event.
 
@@ -1091,20 +1137,22 @@ class InformCalDAVBackend:
     ) -> CalendarObject:
         """Create or update a calendar object.
 
-        Note: Updating individual occurrences is not supported.
-        Only single events can be created or updated.
+        Supports both single events and individual occurrences.
         """
         path_str = self._parse_object_path(path)
 
         # Check if this is an occurrence (contains hyphen)
         if "-" in path_str:
-            # Updating individual occurrences not supported
-            raise HTTPError(
-                405,
-                Exception(
-                    "Modifying individual occurrences is not supported. "
-                    "Create a new event or modify the entire series."
-                ),
+            parts = path_str.rsplit("-", 1)
+            event_key = parts[0]
+            occurrence_id = parts[1] if len(parts) > 1 else None
+
+            if not occurrence_id:
+                raise HTTPError(400, Exception("Invalid occurrence path"))
+
+            # Update individual occurrence
+            return await self._update_occurrence(
+                event_key, occurrence_id, ical_data, path
             )
 
         event_key = path_str
@@ -1170,21 +1218,27 @@ class InformCalDAVBackend:
     async def delete_calendar_object(self, request: Request, path: str) -> None:
         """Delete a calendar object.
 
-        Note: Deleting individual occurrences is not supported.
-        Only single events can be deleted.
+        Supports both single events and individual occurrences.
         """
         path_str = self._parse_object_path(path)
 
         # Check if this is an occurrence (contains hyphen)
         if "-" in path_str:
-            # Deleting individual occurrences not supported
-            raise HTTPError(
-                405,
-                Exception(
-                    "Deleting individual occurrences is not supported. "
-                    "Delete the entire series or modify it to exclude this occurrence."
-                ),
-            )
+            parts = path_str.rsplit("-", 1)
+            event_key = parts[0]
+            occurrence_id = parts[1] if len(parts) > 1 else None
+
+            if not occurrence_id:
+                raise HTTPError(400, Exception("Invalid occurrence path"))
+
+            # Delete individual occurrence
+            try:
+                await self.api_client.delete_calendar_event_occurrence(event_key, occurrence_id)
+            except Exception as e:
+                raise HTTPError(
+                    404, Exception(f"Occurrence not found: {event_key}-{occurrence_id}")
+                ) from e
+            return
 
         event_key = path_str
 
