@@ -1141,22 +1141,39 @@ class InformCalDAVBackend:
         """
         path_str = self._parse_object_path(path)
 
-        # Check if this is an occurrence (contains hyphen)
+        # Check if this might be an occurrence path (contains hyphen)
+        # But verify it's actually an occurrence, not a UUID
+        is_occurrence = False
+        event_key = path_str
+        occurrence_id = None
+
         if "-" in path_str:
             parts = path_str.rsplit("-", 1)
-            event_key = parts[0]
-            occurrence_id = parts[1] if len(parts) > 1 else None
+            potential_key = parts[0]
+            potential_occ_id = parts[1] if len(parts) > 1 else None
 
-            if not occurrence_id:
-                raise HTTPError(400, Exception("Invalid occurrence path"))
+            if potential_occ_id:
+                # Verify this is actually an occurrence by checking if it exists
+                try:
+                    await self.api_client.get_calendar_event_occurrence(
+                        potential_key, potential_occ_id, fields=["key"]
+                    )
+                    # If we get here, it's a valid occurrence
+                    is_occurrence = True
+                    event_key = potential_key
+                    occurrence_id = potential_occ_id
+                except Exception:
+                    # Not an occurrence, treat as new event with UUID filename
+                    is_occurrence = False
+                    event_key = path_str
 
+        if is_occurrence and occurrence_id:
             # Update individual occurrence
             return await self._update_occurrence(
                 event_key, occurrence_id, ical_data, path
             )
 
-        event_key = path_str
-
+        # Handle single event (create or update)
         # Convert iCalendar to INFORM format
         try:
             event_data = self._ical_to_inform_event(ical_data)
@@ -1222,15 +1239,33 @@ class InformCalDAVBackend:
         """
         path_str = self._parse_object_path(path)
 
-        # Check if this is an occurrence (contains hyphen)
+        # Check if this might be an occurrence path (contains hyphen)
+        # But verify it's actually an occurrence, not a UUID
+        is_occurrence = False
+        event_key = path_str
+        occurrence_id = None
+
         if "-" in path_str:
             parts = path_str.rsplit("-", 1)
-            event_key = parts[0]
-            occurrence_id = parts[1] if len(parts) > 1 else None
+            potential_key = parts[0]
+            potential_occ_id = parts[1] if len(parts) > 1 else None
 
-            if not occurrence_id:
-                raise HTTPError(400, Exception("Invalid occurrence path"))
+            if potential_occ_id:
+                # Verify this is actually an occurrence by trying to get it
+                try:
+                    await self.api_client.get_calendar_event_occurrence(
+                        potential_key, potential_occ_id, fields=["key"]
+                    )
+                    # If we get here, it's a valid occurrence
+                    is_occurrence = True
+                    event_key = potential_key
+                    occurrence_id = potential_occ_id
+                except Exception:
+                    # Not an occurrence, treat as single event
+                    is_occurrence = False
+                    event_key = path_str
 
+        if is_occurrence and occurrence_id:
             # Delete individual occurrence
             try:
                 await self.api_client.delete_calendar_event_occurrence(event_key, occurrence_id)
@@ -1240,8 +1275,7 @@ class InformCalDAVBackend:
                 ) from e
             return
 
-        event_key = path_str
-
+        # Delete single event
         try:
             await self.api_client.delete_calendar_event(event_key)
         except Exception as e:
