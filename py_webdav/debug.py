@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from lxml import etree
 
 logger = logging.getLogger("py_webdav")
+inform_logger = logging.getLogger("py_webdav.inform")
 
 
 def format_xml(xml_bytes: bytes | str) -> str:
@@ -148,6 +150,47 @@ def log_response(status_code: int, headers: dict[str, Any], body: bytes | None) 
     logger.info("")  # Empty line for readability
 
 
+def log_inform_request(method: str, url: str, headers: dict[str, Any], body: Any) -> None:
+    """Log an outgoing INFORM API request in JSON format.
+
+    Args:
+        method: HTTP method
+        url: Request URL
+        headers: Request headers
+        body: Request body (dict, list, or None)
+    """
+    request_data = {
+        "type": "request",
+        "method": method,
+        "url": url,
+        "headers": {k: "[REDACTED]" if k.lower() == "authorization" else v for k, v in headers.items()},
+    }
+
+    if body is not None:
+        request_data["body"] = body
+
+    inform_logger.info(json.dumps(request_data, indent=2, ensure_ascii=False))
+
+
+def log_inform_response(status_code: int, body: Any) -> None:
+    """Log an incoming INFORM API response in JSON format.
+
+    Args:
+        status_code: HTTP status code
+        headers: Response headers
+        body: Response body (dict, list, or None)
+    """
+    response_data = {
+        "type": "response",
+        "status_code": status_code,
+    }
+
+    if body is not None:
+        response_data["body"] = body
+
+    inform_logger.info(json.dumps(response_data, indent=2, ensure_ascii=False))
+
+
 def setup_debug_logging() -> None:
     """Configure debug logging for the WebDAV server."""
     # Configure logger
@@ -166,3 +209,23 @@ def setup_debug_logging() -> None:
 
     # Prevent propagation to avoid duplicate logs
     logger.propagate = False
+
+
+def setup_inform_debug_logging() -> None:
+    """Configure debug logging for INFORM API requests/responses."""
+    # Configure logger
+    inform_logger.setLevel(logging.DEBUG)
+
+    # Create console handler with custom formatter
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+
+    # Simple format - just the message (since we format the logs ourselves)
+    formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+
+    # Add handler to logger
+    inform_logger.addHandler(handler)
+
+    # Prevent propagation to avoid duplicate logs
+    inform_logger.propagate = False

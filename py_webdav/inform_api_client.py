@@ -16,11 +16,12 @@ from typing import Any
 
 import httpx
 
-INFORM_CLIENT_ID = os.getenv("INFORM_CLIENT_ID")
-INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET")
-INFORM_LICENSE = os.getenv("INFORM_LICENSE")
-INFORM_USER = os.getenv("INFORM_USER")
-INFORM_PASSWORD = os.getenv("INFORM_PASSWORD")
+INFORM_CLIENT_ID = os.getenv("INFORM_CLIENT_ID", "").strip('"')
+INFORM_CLIENT_SECRET = os.getenv("INFORM_CLIENT_SECRET", "").strip('"')
+INFORM_LICENSE = os.getenv("INFORM_LICENSE", "").strip('"')
+INFORM_USER = os.getenv("INFORM_USER", "").strip('"')
+INFORM_PASSWORD = os.getenv("INFORM_PASSWORD", "").strip('"')
+INFORM_TIMEZONE = os.getenv("INFORM_TIMEZONE", "Europe/Berlin").strip('"')
 
 
 @dataclass
@@ -42,6 +43,11 @@ class InformConfig:
     # API configuration
     base_url: str = "https://testapi.in-software.com/v1"
     timeout: float = 30.0  # Request timeout in seconds
+
+    # Server timezone for occurrence time conversion
+    # INFORM API returns occurrenceStartTime/occurrenceEndTime in seconds from
+    # midnight in the server's local timezone, not UTC
+    server_timezone: str = INFORM_TIMEZONE or "Europe/Berlin"
 
 
 @dataclass
@@ -65,13 +71,15 @@ class InformAPIClient:
     This client can be reused for CardDAV and CalDAV implementations.
     """
 
-    def __init__(self, config: InformConfig | None = None) -> None:
+    def __init__(self, config: InformConfig | None = None, debug: bool = False) -> None:
         """Initialize INFORM API client.
 
         Args:
             config: INFORM API configuration (uses default if None)
+            debug: Enable debug logging of API requests/responses
         """
         self.config = config or InformConfig()
+        self.debug = debug
         self._tokens: InformTokens | None = None
         self._token_lock = asyncio.Lock()
         self._http_client: httpx.AsyncClient | None = None
@@ -82,7 +90,7 @@ class InformAPIClient:
             self._http_client = httpx.AsyncClient(
                 base_url=self.config.base_url,
                 timeout=self.config.timeout,
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
         return self._http_client
 
@@ -113,7 +121,37 @@ class InformAPIClient:
             "pass": self.config.password,
         }
 
+        # Log request if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_request
+
+            # Redact sensitive fields in log
+            log_payload = payload.copy()
+            log_payload["clientSecret"] = "[REDACTED]"
+            log_payload["pass"] = "[REDACTED]"
+            log_inform_request("POST", f"{self.config.base_url}/token", {}, log_payload)
+
         response = await client.post("/token", json=payload)
+
+        # Log response if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_response
+
+            response_body = None
+            if response.headers.get("content-type", "").startswith("application/json"):
+                try:
+                    response_data = response.json()
+                    # Redact sensitive tokens in log
+                    response_body = response_data.copy()
+                    if "accessToken" in response_body:
+                        response_body["accessToken"] = "[REDACTED]"
+                    if "refreshToken" in response_body:
+                        response_body["refreshToken"] = "[REDACTED]"
+                except Exception:
+                    pass
+
+            log_inform_response(response.status_code, response_body)
+
         response.raise_for_status()
 
         data = response.json()
@@ -140,7 +178,37 @@ class InformAPIClient:
             "refreshToken": refresh_token,
         }
 
+        # Log request if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_request
+
+            # Redact sensitive fields in log
+            log_payload = payload.copy()
+            log_payload["clientSecret"] = "[REDACTED]"
+            log_payload["refreshToken"] = "[REDACTED]"
+            log_inform_request("POST", f"{self.config.base_url}/token", {}, log_payload)
+
         response = await client.post("/token", json=payload)
+
+        # Log response if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_response
+
+            response_body = None
+            if response.headers.get("content-type", "").startswith("application/json"):
+                try:
+                    response_data = response.json()
+                    # Redact sensitive tokens in log
+                    response_body = response_data.copy()
+                    if "accessToken" in response_body:
+                        response_body["accessToken"] = "[REDACTED]"
+                    if "refreshToken" in response_body:
+                        response_body["refreshToken"] = "[REDACTED]"
+                except Exception:
+                    pass
+
+            log_inform_response(response.status_code, response_body)
+
         response.raise_for_status()
 
         data = response.json()
@@ -205,7 +273,36 @@ class InformAPIClient:
         headers = kwargs.pop("headers", {})
         headers["Authorization"] = f"Bearer {token}"
 
+        # Log request if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_request
+
+            full_url = f"{self.config.base_url}{path}"
+            # Include query params in URL if present
+            if "params" in kwargs:
+                params = kwargs["params"]
+                if params:
+                    param_str = "&".join(f"{k}={v}" for k, v in params.items())
+                    full_url = f"{full_url}?{param_str}"
+
+            request_body = kwargs.get("json")
+            log_inform_request(method, full_url, headers, request_body)
+
         response = await client.request(method, path, headers=headers, **kwargs)
+
+        # Log response if debug is enabled
+        if self.debug:
+            from py_webdav.debug import log_inform_response
+
+            response_body = None
+            if response.headers.get("content-type", "").startswith("application/json"):
+                try:
+                    response_body = response.json()
+                except Exception:
+                    pass
+
+            log_inform_response(response.status_code, response_body)
+
         response.raise_for_status()
 
         return response

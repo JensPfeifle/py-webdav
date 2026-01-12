@@ -59,6 +59,11 @@ Endpoints:
         help="enable debug logging (logs request/response bodies with formatted XML)",
     )
     parser.add_argument(
+        "--debug-inform",
+        action="store_true",
+        help="enable debug logging for INFORM API requests/responses in JSON format",
+    )
+    parser.add_argument(
         "directory",
         nargs="?",
         default=".",
@@ -81,6 +86,11 @@ Endpoints:
         from py_webdav.debug import setup_debug_logging
         setup_debug_logging()
 
+    # Setup INFORM API debug logging if requested
+    if args.debug_inform:
+        from py_webdav.debug import setup_inform_debug_logging
+        setup_inform_debug_logging()
+
     # Create WebDAV app with CalDAV/CardDAV support if requested
     from starlette.applications import Starlette
     from starlette.routing import Route
@@ -96,11 +106,11 @@ Endpoints:
 
     if args.caldav:
         from py_webdav.caldav import InformCalDAVBackend
-        caldav_backend = InformCalDAVBackend(owner_key="INFO")
+        caldav_backend = InformCalDAVBackend(owner_key="INFO", debug=args.debug_inform)
 
     if args.carddav:
         from py_webdav.carddav import InformCardDAVBackend
-        carddav_backend = InformCardDAVBackend()
+        carddav_backend = InformCardDAVBackend(debug=args.debug_inform)
 
 
 

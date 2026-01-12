@@ -10,7 +10,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import md5
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from dateutil.rrule import rrulestr
 from icalendar import Calendar as iCalendar
 from icalendar import Event as iEvent
 from starlette.requests import Request
@@ -33,6 +35,7 @@ class InformCalDAVBackend:
         home_set_path: str = "/calendars/",
         principal_path: str = "/principals/current/",
         owner_key: str | None = None,
+        debug: bool = False,
     ) -> None:
         """Initialize INFORM CalDAV backend.
 
@@ -41,11 +44,12 @@ class InformCalDAVBackend:
             home_set_path: Calendar home set path
             principal_path: User principal path
             owner_key: Employee key who owns the calendar (required)
+            debug: Enable debug logging of INFORM API requests/responses
         """
-        self.api_client = InformAPIClient(config)
+        self.api_client = InformAPIClient(config, debug=debug)
         self.home_set_path = home_set_path
         self.principal_path = principal_path
-        self.owner_key = owner_key or (config.username if config else None)
+        self.owner_key = owner_key or (config.username if config else "")
         self._sync_weeks = 2  # Sync 2 weeks before/after current date
 
     async def calendar_home_set_path(self, request: Request) -> str:
@@ -71,6 +75,63 @@ class InformCalDAVBackend:
         end = now + timedelta(weeks=self._sync_weeks)
         return start, end
 
+    def _format_datetime_for_inform(self, dt: datetime) -> str:
+        """Format datetime for INFORM API.
+
+        INFORM API requires datetime in format: YYYY-MM-DDTHH:MM:SSZ
+        - Must use 'Z' suffix (not +00:00)
+        - Must NOT include microseconds
+
+        Args:
+            dt: Datetime object (should be UTC)
+
+        Returns:
+            Formatted datetime string
+        """
+        # Ensure datetime is in UTC
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        elif dt.tzinfo != UTC:
+            dt = dt.astimezone(UTC)
+
+        # Format without microseconds, with Z suffix
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _occurrence_time_to_utc(
+        self, date_str: str, seconds_from_midnight: float
+    ) -> datetime:
+        """Convert INFORM occurrence time to UTC datetime.
+
+        INFORM API returns occurrenceStartTime/occurrenceEndTime as seconds from
+        midnight in the server's LOCAL timezone (not UTC). This method converts
+        those times to proper UTC datetimes.
+
+        Args:
+            date_str: Date string in ISO format (YYYY-MM-DD)
+            seconds_from_midnight: Seconds from midnight in server's local timezone
+
+        Returns:
+            UTC datetime object
+        """
+        # Parse the date
+        date = datetime.fromisoformat(date_str).date()
+
+        # Calculate hours and minutes
+        hours = int(seconds_from_midnight // 3600)
+        minutes = int((seconds_from_midnight % 3600) // 60)
+        seconds = int(seconds_from_midnight % 60)
+
+        # Create datetime in server's local timezone
+        server_tz = ZoneInfo(self.api_client.config.server_timezone)
+        local_dt = datetime.combine(date, datetime.min.time()).replace(
+            hour=hours, minute=minutes, second=seconds, tzinfo=server_tz
+        )
+
+        # Convert to UTC
+        utc_dt = local_dt.astimezone(UTC)
+
+        return utc_dt
+
     def _parse_object_path(self, path: str) -> str:
         """Parse object path to extract event key.
 
@@ -94,9 +155,7 @@ class InformCalDAVBackend:
 
         return event_key
 
-    def _inform_series_schema_to_rrule(
-        self, series_schema: dict[str, Any]
-    ) -> str | None:
+    def _inform_series_schema_to_rrule(self, series_schema: dict[str, Any]) -> str | None:
         """Convert INFORM seriesSchema to iCalendar RRULE.
 
         Args:
@@ -134,7 +193,7 @@ class InformCalDAVBackend:
                 "saturday": "SA",
                 "sunday": "SU",
             }
-            byday = ",".join(day_map.get(d, d.upper()[:2]) for d in weekdays)
+            byday = ",".join(day_map.get(d, d.upper()[:2]) for d in weekdays)  # type: ignore
 
             if interval == 1:
                 return f"FREQ=WEEKLY;BYDAY={byday}"
@@ -212,6 +271,36 @@ class InformCalDAVBackend:
 
         return None
 
+    def _calculate_first_occurrence(
+        self, series_start_dt: datetime, rrule_str: str
+    ) -> datetime:
+        """Calculate the first occurrence matching the RRULE.
+
+        INFORM's seriesStartDate may not match the first actual occurrence if the
+        RRULE has constraints (e.g., BYDAY=MO,TU,WE,TH,FR excludes weekends).
+        This method finds the first occurrence that matches the RRULE.
+
+        Args:
+            series_start_dt: Series start datetime
+            rrule_str: RRULE string (e.g., "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR")
+
+        Returns:
+            First occurrence datetime that matches the RRULE
+        """
+        try:
+            # Build RRULE string for dateutil
+            dtstart_str = series_start_dt.strftime('%Y%m%dT%H%M%SZ')
+            rrule_full = f"DTSTART:{dtstart_str}\nRRULE:{rrule_str}"
+
+            # Parse and get first occurrence
+            rule = rrulestr(rrule_full)
+            first_occ = rule[0] if rule else series_start_dt
+
+            return first_occ
+        except Exception:
+            # If parsing fails, fall back to series start date
+            return series_start_dt
+
     def _inform_event_to_ical(self, event_data: dict[str, Any]) -> str:
         """Convert INFORM calendar event to iCalendar format.
 
@@ -236,10 +325,8 @@ class InformCalDAVBackend:
         if subject:
             event.add("summary", subject)
 
-        # Description (content)
+        # Description (content) - will add debug info later
         content = event_data.get("content", "")
-        if content:
-            event.add("description", content)
 
         # Location
         location = event_data.get("location", "")
@@ -282,37 +369,51 @@ class InformCalDAVBackend:
             occ_end_time = event_data.get("occurrenceEndTime", 0)
             whole_day = event_data.get("wholeDayEvent", False)
 
-            # Convert series start date + occurrence time to datetime
-            if series_start_date_str:
-                series_start_date = datetime.fromisoformat(series_start_date_str)
-                hours = int(occ_start_time // 3600)
-                minutes = int((occ_start_time % 3600) // 60)
-
-                if whole_day:
-                    event.add("dtstart", series_start_date.date())
-                else:
-                    start_dt = series_start_date.replace(
-                        hour=hours, minute=minutes, tzinfo=UTC
-                    )
-                    event.add("dtstart", start_dt)
-
-                # Calculate end time for recurring events
-                # Duration for reference (currently unused)
-                _duration_secs = occ_end_time - occ_start_time
-                if not whole_day:
-                    end_hours = int(occ_end_time // 3600)
-                    end_minutes = int((occ_end_time % 3600) // 60)
-                    end_dt = series_start_date.replace(
-                        hour=end_hours, minute=end_minutes, tzinfo=UTC
-                    )
-                    event.add("dtend", end_dt)
-                else:
-                    # For all-day events, use date
-                    event.add("dtend", series_start_date.date())
-
-            # Add recurrence rule
+            # Generate RRULE first (needed to calculate correct first occurrence)
             series_schema = event_data.get("seriesSchema", {})
             rrule_str = self._inform_series_schema_to_rrule(series_schema)
+
+            # Convert series start date + occurrence time to datetime
+            if series_start_date_str:
+                if whole_day:
+                    series_start_date = datetime.fromisoformat(series_start_date_str)
+                    # For whole-day events, calculate first occurrence matching RRULE
+                    if rrule_str:
+                        # Convert to datetime for RRULE calculation
+                        series_start_dt = datetime.combine(
+                            series_start_date.date(), datetime.min.time()
+                        ).replace(tzinfo=UTC)
+                        first_occ_dt = self._calculate_first_occurrence(
+                            series_start_dt, rrule_str
+                        )
+                        event.add("dtstart", first_occ_dt.date())
+                        event.add("dtend", first_occ_dt.date())
+                    else:
+                        event.add("dtstart", series_start_date.date())
+                        event.add("dtend", series_start_date.date())
+                else:
+                    # Convert occurrence times from server local timezone to UTC
+                    start_dt = self._occurrence_time_to_utc(
+                        series_start_date_str, occ_start_time
+                    )
+                    end_dt = self._occurrence_time_to_utc(
+                        series_start_date_str, occ_end_time
+                    )
+
+                    # Calculate first occurrence matching RRULE
+                    if rrule_str:
+                        first_occ_dt = self._calculate_first_occurrence(start_dt, rrule_str)
+                        # Calculate duration to apply to first occurrence
+                        duration = end_dt - start_dt
+                        first_occ_end = first_occ_dt + duration
+
+                        event.add("dtstart", first_occ_dt)
+                        event.add("dtend", first_occ_end)
+                    else:
+                        event.add("dtstart", start_dt)
+                        event.add("dtend", end_dt)
+
+            # Add recurrence rule
             if rrule_str:
                 event.add("rrule", rrule_str)
 
@@ -344,6 +445,40 @@ class InformCalDAVBackend:
             event.add("class", "PRIVATE")
         else:
             event.add("class", "PUBLIC")
+
+        # Add description with debug information
+        event_key = event_data.get("key", "")
+        event_mode = event_data.get("eventMode", "single")
+        series_schema = event_data.get("seriesSchema", {})
+
+        debug_lines = []
+        debug_lines.append(f"[DEBUG] Event ID: {event_key}")
+        debug_lines.append(f"[DEBUG] Event Mode: {event_mode}")
+
+        if event_mode == "serial" and series_schema:
+            import json
+
+            debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
+            debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
+            debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
+
+            # Add the generated RRULE string (convert vRecur object to string if present)
+            if "rrule" in event:
+                rrule_value = event.get("rrule")
+                # Convert vRecur to clean string format
+                if hasattr(rrule_value, 'to_ical'):
+                    rrule_str_debug = rrule_value.to_ical().decode('utf-8')
+                else:
+                    rrule_str_debug = str(rrule_value)
+                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_str_debug}")
+
+        # Combine original content with debug info
+        if content:
+            full_description = content + "\n\n" + "\n".join(debug_lines)
+        else:
+            full_description = "\n".join(debug_lines)
+
+        event.add("description", full_description)
 
         # Last modified (use current time)
         event.add("dtstamp", datetime.now(UTC))
@@ -381,7 +516,7 @@ class InformCalDAVBackend:
 
         # Content (description)
         if "description" in event:
-            event_data["description"] = str(event["description"])
+            event_data["content"] = str(event["description"])
 
         # Location
         if "location" in event:
@@ -412,11 +547,13 @@ class InformCalDAVBackend:
                 # Extract time in seconds from midnight
                 seconds = dtstart.hour * 3600 + dtstart.minute * 60
                 event_data["occurrenceStartTime"] = seconds
+                event_data["occurrenceStartTimeEnabled"] = True
                 event_data["wholeDayEvent"] = False
             else:
                 # Date only (all-day event)
                 event_data["seriesStartDate"] = dtstart.isoformat()
                 event_data["occurrenceStartTime"] = 0
+                event_data["occurrenceStartTimeEnabled"] = True
                 event_data["wholeDayEvent"] = True
 
             # Parse DTEND or duration
@@ -425,8 +562,10 @@ class InformCalDAVBackend:
                 if isinstance(dtend, datetime):
                     seconds = dtend.hour * 3600 + dtend.minute * 60
                     event_data["occurrenceEndTime"] = seconds
+                    event_data["occurrenceEndTimeEnabled"] = True
                 else:
                     event_data["occurrenceEndTime"] = 86340  # End of day
+                    event_data["occurrenceEndTimeEnabled"] = True
 
             # Parse RRULE
             rrule = event.get("rrule")
@@ -448,24 +587,26 @@ class InformCalDAVBackend:
             # Parse DTSTART
             dtstart = event.get("dtstart").dt
             if isinstance(dtstart, datetime):
-                event_data["startDateTime"] = dtstart.isoformat()
+                event_data["startDateTime"] = self._format_datetime_for_inform(dtstart)
                 event_data["wholeDayEvent"] = False
+                event_data["startDateTimeEnabled"] = True
             else:
                 # Convert date to datetime
                 dt = datetime.combine(dtstart, datetime.min.time()).replace(tzinfo=UTC)
-                event_data["startDateTime"] = dt.isoformat()
+                event_data["startDateTime"] = self._format_datetime_for_inform(dt)
                 event_data["wholeDayEvent"] = True
+                event_data["startDateTimeEnabled"] = True
 
             # Parse DTEND
             if "dtend" in event:
                 dtend = event.get("dtend").dt
                 if isinstance(dtend, datetime):
-                    event_data["endDateTime"] = dtend.isoformat()
+                    event_data["endDateTime"] = self._format_datetime_for_inform(dtend)
+                    event_data["endDateTimeEnabled"] = True
                 else:
-                    dt = datetime.combine(dtend, datetime.min.time()).replace(
-                        tzinfo=UTC
-                    )
-                    event_data["endDateTime"] = dt.isoformat()
+                    dt = datetime.combine(dtend, datetime.min.time()).replace(tzinfo=UTC)
+                    event_data["endDateTime"] = self._format_datetime_for_inform(dt)
+                    event_data["endDateTimeEnabled"] = True
 
         # Parse alarms for reminders
         for component in event.walk():
@@ -664,7 +805,7 @@ class InformCalDAVBackend:
 
         # Fetch event from INFORM API
         try:
-            event_data = await self.api_client.get_calendar_event(event_key)
+            event_data = await self.api_client.get_calendar_event(event_key, fields=["all"])
         except Exception as e:
             raise HTTPError(404, Exception(f"Event not found: {event_key}")) from e
 
@@ -695,27 +836,33 @@ class InformCalDAVBackend:
         # Fetch events from INFORM API
         response = await self.api_client.get_calendar_events_occurrences(
             owner_key=self.owner_key,
-            start_datetime=start_date.isoformat(),
-            end_datetime=end_date.isoformat(),
+            start_datetime=self._format_datetime_for_inform(start_date),
+            end_datetime=self._format_datetime_for_inform(end_date),
             limit=1000,
         )
 
         events = response.get("calendarEvents", [])
         objects = []
 
+        # Track unique event keys (avoid duplicates from occurrences)
+        seen_keys = set()
+
         for event_data in events:
             event_key = event_data.get("key", "")
-            if not event_key:
+            if not event_key or event_key in seen_keys:
                 continue
+
+            seen_keys.add(event_key)
 
             # For occurrences of serial events, we need to fetch the full event
             occurrence_id = event_data.get("occurrenceId")
             if occurrence_id:
                 # This is an occurrence of a serial event
-                # Fetch the full serial event definition
+                # Fetch the full serial event definition with all fields
+                # (needed to get seriesSchema for RRULE generation)
                 try:
                     full_event_data = await self.api_client.get_calendar_event(
-                        event_key
+                        event_key, fields=["all"]
                     )
                     event_data = full_event_data
                 except Exception:
@@ -771,8 +918,8 @@ class InformCalDAVBackend:
         # Fetch events from INFORM API
         response = await self.api_client.get_calendar_events_occurrences(
             owner_key=self.owner_key,
-            start_datetime=start_date.isoformat(),
-            end_datetime=end_date.isoformat(),
+            start_datetime=self._format_datetime_for_inform(start_date),
+            end_datetime=self._format_datetime_for_inform(end_date),
             limit=1000,
         )
 
@@ -789,12 +936,13 @@ class InformCalDAVBackend:
 
             seen_keys.add(event_key)
 
-            # For occurrences, fetch full event
+            # For occurrences, fetch full event with all fields
+            # (needed to get seriesSchema for RRULE generation)
             occurrence_id = event_data.get("occurrenceId")
             if occurrence_id:
                 try:
                     full_event_data = await self.api_client.get_calendar_event(
-                        event_key
+                        event_key, fields=["all"]
                     )
                     event_data = full_event_data
                 except Exception:
@@ -856,9 +1004,7 @@ class InformCalDAVBackend:
         try:
             if event_exists:
                 # Update existing event
-                _updated_event = await self.api_client.update_calendar_event(
-                    event_key, event_data
-                )
+                _updated_event = await self.api_client.update_calendar_event(event_key, event_data)
             else:
                 # Create new event
                 # Note: INFORM API auto-generates keys, so we can't use the path key
@@ -867,11 +1013,16 @@ class InformCalDAVBackend:
                 event_key = created_event.get("key", event_key)
 
             # Fetch the created/updated event to get complete data
-            final_event = await self.api_client.get_calendar_event(event_key)
+            final_event = await self.api_client.get_calendar_event(event_key, fields=["all"])
 
             # Convert back to iCalendar
             result_ical = self._inform_event_to_ical(final_event)
             etag = md5(result_ical.encode()).hexdigest()
+
+            # Update path to use INFORM key as UID (if event was newly created)
+            if not event_exists:
+                calendar_path = self._get_calendar_path()
+                path = f"{calendar_path}{event_key}.ics"
 
             return CalendarObject(
                 path=path,
