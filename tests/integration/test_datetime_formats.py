@@ -6,6 +6,7 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import pytest
 
 
 class InformAPITest:
@@ -74,7 +75,14 @@ class InformAPITest:
         response.raise_for_status()
 
 
-async def test_datetime_format(api, format_name, start_str, end_str):
+@pytest.fixture
+async def api():
+    """Create INFORM API test client."""
+    async with InformAPITest() as client:
+        yield client
+
+
+async def _test_datetime_format_helper(api, format_name, start_str, end_str):
     """Test a specific datetime format."""
     print(f"\n{'=' * 80}")
     print(f"Testing: {format_name}")
@@ -135,7 +143,7 @@ async def main():
         target_end = target_date + timedelta(hours=1)
 
         # Format 1: ISO 8601 with timezone (+00:00)
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "ISO 8601 with +00:00",
             target_date.isoformat(),
@@ -143,7 +151,7 @@ async def main():
         )
 
         # Format 2: ISO 8601 with Z
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "ISO 8601 with Z",
             target_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -151,7 +159,7 @@ async def main():
         )
 
         # Format 3: Without timezone info
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "ISO 8601 without timezone",
             target_date.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -159,7 +167,7 @@ async def main():
         )
 
         # Format 4: OpenAPI example format (from the docs)
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "OpenAPI example format",
             "2022-06-22T12:30:00Z",  # From OpenAPI spec
@@ -168,7 +176,7 @@ async def main():
 
         # Format 5: Today's date with explicit time
         today = now.date()
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "Today with explicit time (Z)",
             f"{today}T14:30:00Z",
@@ -176,7 +184,7 @@ async def main():
         )
 
         # Format 6: Check if microseconds matter
-        await test_datetime_format(
+        await _test_datetime_format_helper(
             api,
             "With microseconds",
             f"{today}T14:30:00.000000Z",
