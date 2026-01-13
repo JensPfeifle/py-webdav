@@ -10,14 +10,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import md5
 from typing import Any
-from zoneinfo import ZoneInfo
 
-from dateutil.rrule import rrulestr
 from icalendar import Calendar as iCalendar
-from icalendar import Event as iEvent
 from starlette.requests import Request
 
 from ..inform_api_client import InformAPIClient, InformConfig
+from ..inform_calendar_utils import InformCalendarConverter
 from ..internal import HTTPError
 from .caldav import Calendar, CalendarCompRequest, CalendarObject, CalendarQuery
 
@@ -47,6 +45,9 @@ class InformCalDAVBackend:
             debug: Enable debug logging of INFORM API requests/responses
         """
         self.api_client = InformAPIClient(config, debug=debug)
+        self.converter = InformCalendarConverter(
+            server_timezone=self.api_client.config.server_timezone
+        )
         self.home_set_path = home_set_path
         self.principal_path = principal_path
         self.owner_key = owner_key or (config.username if config else "")
@@ -70,10 +71,7 @@ class InformCalDAVBackend:
         Returns:
             Tuple of (start_date, end_date)
         """
-        now = datetime.now(UTC)
-        start = now - timedelta(weeks=self._sync_weeks)
-        end = now + timedelta(weeks=self._sync_weeks)
-        return start, end
+        return self.converter.get_sync_date_range(weeks=self._sync_weeks)
 
     def _format_datetime_for_inform(self, dt: datetime) -> str:
         """Format datetime for INFORM API.
@@ -88,18 +86,9 @@ class InformCalDAVBackend:
         Returns:
             Formatted datetime string
         """
-        # Ensure datetime is in UTC
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=UTC)
-        elif dt.tzinfo != UTC:
-            dt = dt.astimezone(UTC)
+        return self.converter.format_datetime_for_inform(dt)
 
-        # Format without microseconds, with Z suffix
-        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    def _occurrence_time_to_utc(
-        self, date_str: str, seconds_from_midnight: float
-    ) -> datetime:
+    def _occurrence_time_to_utc(self, date_str: str, seconds_from_midnight: float) -> datetime:
         """Convert INFORM occurrence time to UTC datetime.
 
         INFORM API returns occurrenceStartTime/occurrenceEndTime as seconds from
@@ -113,24 +102,7 @@ class InformCalDAVBackend:
         Returns:
             UTC datetime object
         """
-        # Parse the date
-        date = datetime.fromisoformat(date_str).date()
-
-        # Calculate hours and minutes
-        hours = int(seconds_from_midnight // 3600)
-        minutes = int((seconds_from_midnight % 3600) // 60)
-        seconds = int(seconds_from_midnight % 60)
-
-        # Create datetime in server's local timezone
-        server_tz = ZoneInfo(self.api_client.config.server_timezone)
-        local_dt = datetime.combine(date, datetime.min.time()).replace(
-            hour=hours, minute=minutes, second=seconds, tzinfo=server_tz
-        )
-
-        # Convert to UTC
-        utc_dt = local_dt.astimezone(UTC)
-
-        return utc_dt
+        return self.converter.occurrence_time_to_utc(date_str, seconds_from_midnight)
 
     def _parse_object_path(self, path: str) -> str:
         """Parse object path to extract event key.
@@ -164,116 +136,9 @@ class InformCalDAVBackend:
         Returns:
             RRULE string or None if not a recurring event
         """
-        schema_type = series_schema.get("schemaType")
+        return self.converter.inform_series_schema_to_rrule(series_schema)
 
-        if schema_type == "daily":
-            daily_data = series_schema.get("dailySchemaData", {})
-            regularity = daily_data.get("regularity")
-
-            if regularity == "allBusinessDays":
-                # Every business day (Mon-Fri)
-                return "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
-            elif regularity == "interval":
-                # Every N days
-                interval = daily_data.get("daysInterval", 1)
-                return f"FREQ=DAILY;INTERVAL={interval}"
-
-        elif schema_type == "weekly":
-            weekly_data = series_schema.get("weeklySchemaData", {})
-            weekdays = weekly_data.get("weekdays", [])
-            interval = weekly_data.get("weeksInterval", 1)
-
-            # Convert weekday names to iCal format
-            day_map = {
-                "monday": "MO",
-                "tuesday": "TU",
-                "wednesday": "WE",
-                "thursday": "TH",
-                "friday": "FR",
-                "saturday": "SA",
-                "sunday": "SU",
-            }
-            byday = ",".join(day_map.get(d, d.upper()[:2]) for d in weekdays)  # type: ignore
-
-            if interval == 1:
-                return f"FREQ=WEEKLY;BYDAY={byday}"
-            else:
-                return f"FREQ=WEEKLY;INTERVAL={interval};BYDAY={byday}"
-
-        elif schema_type == "monthly":
-            monthly_data = series_schema.get("monthlySchemaData", {})
-            regularity = monthly_data.get("regularity")
-
-            if regularity == "specificDate":
-                # Specific day of month
-                day = monthly_data.get("dayOfMonth", 1)
-                interval = monthly_data.get("monthsInterval", 1)
-                if interval == 1:
-                    return f"FREQ=MONTHLY;BYMONTHDAY={day}"
-                else:
-                    return f"FREQ=MONTHLY;INTERVAL={interval};BYMONTHDAY={day}"
-
-            elif regularity == "specificDay":
-                # Specific weekday (e.g., first Monday)
-                weekday = monthly_data.get("weekday", "monday")
-                week_number = monthly_data.get("weekNumber", 1)
-                interval = monthly_data.get("monthsInterval", 1)
-
-                day_map = {
-                    "monday": "MO",
-                    "tuesday": "TU",
-                    "wednesday": "WE",
-                    "thursday": "TH",
-                    "friday": "FR",
-                    "saturday": "SA",
-                    "sunday": "SU",
-                }
-                byday = f"{week_number}{day_map.get(weekday, 'MO')}"
-
-                if interval == 1:
-                    return f"FREQ=MONTHLY;BYDAY={byday}"
-                else:
-                    return f"FREQ=MONTHLY;INTERVAL={interval};BYDAY={byday}"
-
-        elif schema_type == "yearly":
-            yearly_data = series_schema.get("yearlySchemaData", {})
-            regularity = yearly_data.get("regularity")
-
-            if regularity == "specificDate":
-                # Specific date (month + day)
-                month = yearly_data.get("monthOfYear", 1)
-                day = yearly_data.get("dayOfMonth", 1)
-                return f"FREQ=YEARLY;BYMONTH={month};BYMONTHDAY={day}"
-
-            elif regularity == "specificDay":
-                # Specific weekday in month (e.g., first Monday of June)
-                month = yearly_data.get("monthOfYear", 1)
-                weekday = yearly_data.get("weekday", "monday")
-                week_number = yearly_data.get("weekNumber", 1)
-
-                day_map = {
-                    "monday": "MO",
-                    "tuesday": "TU",
-                    "wednesday": "WE",
-                    "thursday": "TH",
-                    "friday": "FR",
-                    "saturday": "SA",
-                    "sunday": "SU",
-                }
-                byday = f"{week_number}{day_map.get(weekday, 'MO')}"
-                return f"FREQ=YEARLY;BYMONTH={month};BYDAY={byday}"
-
-        elif schema_type == "arrhythmic":
-            # Arrhythmic events don't have a regular recurrence pattern
-            # They're defined by explicit occurrence dates
-            # Not supported by RRULE, so return None
-            return None
-
-        return None
-
-    def _calculate_first_occurrence(
-        self, series_start_dt: datetime, rrule_str: str
-    ) -> datetime:
+    def _calculate_first_occurrence(self, series_start_dt: datetime, rrule_str: str) -> datetime:
         """Calculate the first occurrence matching the RRULE.
 
         INFORM's seriesStartDate may not match the first actual occurrence if the
@@ -287,19 +152,7 @@ class InformCalDAVBackend:
         Returns:
             First occurrence datetime that matches the RRULE
         """
-        try:
-            # Build RRULE string for dateutil
-            dtstart_str = series_start_dt.strftime('%Y%m%dT%H%M%SZ')
-            rrule_full = f"DTSTART:{dtstart_str}\nRRULE:{rrule_str}"
-
-            # Parse and get first occurrence
-            rule = rrulestr(rrule_full)
-            first_occ = rule[0] if rule else series_start_dt
-
-            return first_occ
-        except Exception:
-            # If parsing fails, fall back to series start date
-            return series_start_dt
+        return self.converter.calculate_first_occurrence(series_start_dt, rrule_str)
 
     async def _update_occurrence(
         self, event_key: str, occurrence_id: str, ical_data: str, path: str
@@ -447,182 +300,7 @@ class InformCalDAVBackend:
         Returns:
             iCalendar data as string
         """
-        cal = iCalendar()
-        cal.add("prodid", "-//INFORM CalDAV Backend//")
-        cal.add("version", "2.0")
-
-        event = iEvent()
-
-        # Required: UID
-        event_key = event_data.get("key", "")
-        event.add("uid", event_key)
-
-        # Summary (subject)
-        subject = event_data.get("subject", "")
-        if subject:
-            event.add("summary", subject)
-
-        # Description (content) - will add debug info later
-        content = event_data.get("content", "")
-
-        # Location
-        location = event_data.get("location", "")
-        if location:
-            event.add("location", location)
-
-        # Categories
-        category = event_data.get("eventCategory", "")
-        if category:
-            event.add("categories", [category])
-
-        # Event mode determines if single or recurring
-        event_mode = event_data.get("eventMode", "single")
-
-        if event_mode == "single":
-            # Single event
-            start_dt_str = event_data.get("startDateTime")
-            end_dt_str = event_data.get("endDateTime")
-            whole_day = event_data.get("wholeDayEvent", False)
-
-            if start_dt_str:
-                start_dt = datetime.fromisoformat(start_dt_str.replace("Z", "+00:00"))
-                if whole_day:
-                    event.add("dtstart", start_dt.date())
-                else:
-                    event.add("dtstart", start_dt)
-
-            if end_dt_str:
-                end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
-                if whole_day:
-                    event.add("dtend", end_dt.date())
-                else:
-                    event.add("dtend", end_dt)
-
-        elif event_mode == "serial":
-            # Recurring event
-            series_start_date_str = event_data.get("seriesStartDate")
-            series_end_date_str = event_data.get("seriesEndDate")
-            occ_start_time = event_data.get("occurrenceStartTime", 0)
-            occ_end_time = event_data.get("occurrenceEndTime", 0)
-            whole_day = event_data.get("wholeDayEvent", False)
-
-            # Generate RRULE first (needed to calculate correct first occurrence)
-            series_schema = event_data.get("seriesSchema", {})
-            rrule_str = self._inform_series_schema_to_rrule(series_schema)
-
-            # Convert series start date + occurrence time to datetime
-            if series_start_date_str:
-                if whole_day:
-                    series_start_date = datetime.fromisoformat(series_start_date_str)
-                    # For whole-day events, calculate first occurrence matching RRULE
-                    if rrule_str:
-                        # Convert to datetime for RRULE calculation
-                        series_start_dt = datetime.combine(
-                            series_start_date.date(), datetime.min.time()
-                        ).replace(tzinfo=UTC)
-                        first_occ_dt = self._calculate_first_occurrence(
-                            series_start_dt, rrule_str
-                        )
-                        event.add("dtstart", first_occ_dt.date())
-                        event.add("dtend", first_occ_dt.date())
-                    else:
-                        event.add("dtstart", series_start_date.date())
-                        event.add("dtend", series_start_date.date())
-                else:
-                    # Convert occurrence times from server local timezone to UTC
-                    start_dt = self._occurrence_time_to_utc(
-                        series_start_date_str, occ_start_time
-                    )
-                    end_dt = self._occurrence_time_to_utc(
-                        series_start_date_str, occ_end_time
-                    )
-
-                    # Calculate first occurrence matching RRULE
-                    if rrule_str:
-                        first_occ_dt = self._calculate_first_occurrence(start_dt, rrule_str)
-                        # Calculate duration to apply to first occurrence
-                        duration = end_dt - start_dt
-                        first_occ_end = first_occ_dt + duration
-
-                        event.add("dtstart", first_occ_dt)
-                        event.add("dtend", first_occ_end)
-                    else:
-                        event.add("dtstart", start_dt)
-                        event.add("dtend", end_dt)
-
-            # Add recurrence rule
-            if rrule_str:
-                event.add("rrule", rrule_str)
-
-            # Add UNTIL if series has end date
-            if series_end_date_str and rrule_str:
-                series_end_date = datetime.fromisoformat(series_end_date_str)
-                # Update RRULE to include UNTIL
-                until_str = series_end_date.strftime("%Y%m%dT235959Z")
-                if ";UNTIL=" not in rrule_str:
-                    rrule_str = f"{rrule_str};UNTIL={until_str}"
-                    event["rrule"] = rrule_str
-
-        # Reminder/alarm
-        reminder_enabled = event_data.get("reminderEnabled", False)
-        remind_before = event_data.get("remindBeforeStart", 0)
-        if reminder_enabled and remind_before > 0:
-            from icalendar import Alarm
-
-            alarm = Alarm()
-            alarm.add("action", "DISPLAY")
-            alarm.add("description", subject or "Reminder")
-            # Convert seconds to negative duration
-            alarm.add("trigger", timedelta(seconds=-remind_before))
-            event.add_component(alarm)
-
-        # Privacy
-        is_private = event_data.get("private", False)
-        if is_private:
-            event.add("class", "PRIVATE")
-        else:
-            event.add("class", "PUBLIC")
-
-        # Add description with debug information
-        event_key = event_data.get("key", "")
-        event_mode = event_data.get("eventMode", "single")
-        series_schema = event_data.get("seriesSchema", {})
-
-        debug_lines = []
-        debug_lines.append(f"[DEBUG] Event ID: {event_key}")
-        debug_lines.append(f"[DEBUG] Event Mode: {event_mode}")
-
-        if event_mode == "serial" and series_schema:
-            import json
-
-            debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
-            debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
-            debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
-
-            # Add the generated RRULE string (convert vRecur object to string if present)
-            if "rrule" in event:
-                rrule_value = event.get("rrule")
-                # Convert vRecur to clean string format
-                if hasattr(rrule_value, 'to_ical'):
-                    rrule_str_debug = rrule_value.to_ical().decode('utf-8')
-                else:
-                    rrule_str_debug = str(rrule_value)
-                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_str_debug}")
-
-        # Combine original content with debug info
-        if content:
-            full_description = content + "\n\n" + "\n".join(debug_lines)
-        else:
-            full_description = "\n".join(debug_lines)
-
-        event.add("description", full_description)
-
-        # Last modified (use current time)
-        event.add("dtstamp", datetime.now(UTC))
-
-        cal.add_component(event)
-        ical_str: str = cal.to_ical().decode("utf-8")
-        return ical_str
+        return self.converter.inform_event_to_ical(event_data)
 
     def _ical_to_inform_event(self, ical_data: str) -> dict[str, Any]:
         """Convert iCalendar data to INFORM calendar event format.
