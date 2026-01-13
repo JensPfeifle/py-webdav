@@ -357,6 +357,7 @@ class Handler:
         addressbook_home_path: str | None = None,
         caldav_backend=None,
         carddav_backend=None,
+        ics_feed_handler=None,
         debug: bool = False,
     ):
         """Initialize handler.
@@ -369,6 +370,7 @@ class Handler:
             addressbook_home_path: Path to addressbook home set (default: /contacts/)
             caldav_backend: Optional CalDAV backend instance
             carddav_backend: Optional CardDAV backend instance
+            ics_feed_handler: Optional ICS feed handler instance
             debug: Enable debug logging
         """
         self.filesystem = filesystem
@@ -388,6 +390,7 @@ class Handler:
         self.addressbook_home_path = addressbook_home_path
         self.caldav_backend = caldav_backend
         self.carddav_backend = carddav_backend
+        self.ics_feed_handler = ics_feed_handler
 
     async def handle(self, request: Request) -> StarletteResponse:
         """Handle WebDAV HTTP request.
@@ -424,6 +427,23 @@ class Handler:
 
         if self.filesystem is None:
             return StarletteResponse(content="webdav: no filesystem available", status_code=500)
+
+        # Handle ICS feed endpoint
+        if request.url.path == "/feed.ics" and self.ics_feed_handler:
+            if request.method == "GET":
+                response = await self.ics_feed_handler.handle_feed_request(request)
+                if self.debug:
+                    await self._log_response(response)
+                return response
+            else:
+                response = StarletteResponse(
+                    content="Method not allowed. Only GET is supported for ICS feed.",
+                    status_code=405,
+                    headers={"Allow": "GET"},
+                )
+                if self.debug:
+                    await self._log_response(response)
+                return response
 
         # Handle principal discovery paths
         if self.enable_principal_discovery:

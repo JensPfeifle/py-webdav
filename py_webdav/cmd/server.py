@@ -64,6 +64,17 @@ Endpoints:
         help="enable debug logging for INFORM API requests/responses in JSON format",
     )
     parser.add_argument(
+        "--ics-feed",
+        action="store_true",
+        help="enable ICS feed endpoint for calendar subscriptions at /feed.ics?calendar=OWNER_KEY",
+    )
+    parser.add_argument(
+        "--ics-feed-weeks",
+        type=int,
+        default=2,
+        help="number of weeks before/after current date to include in ICS feed (default: 2)",
+    )
+    parser.add_argument(
         "directory",
         nargs="?",
         default=".",
@@ -84,11 +95,13 @@ Endpoints:
     # Setup debug logging if requested
     if args.debug:
         from py_webdav.debug import setup_debug_logging
+
         setup_debug_logging()
 
     # Setup INFORM API debug logging if requested
     if args.debug_inform:
         from py_webdav.debug import setup_inform_debug_logging
+
         setup_inform_debug_logging()
 
     # Create WebDAV app with CalDAV/CardDAV support if requested
@@ -103,16 +116,25 @@ Endpoints:
     # Create backends if CalDAV/CardDAV are enabled
     caldav_backend = None
     carddav_backend = None
+    ics_feed_handler = None
 
     if args.caldav:
         from py_webdav.caldav import InformCalDAVBackend
+
         caldav_backend = InformCalDAVBackend(owner_key="INFO", debug=args.debug_inform)
 
     if args.carddav:
         from py_webdav.carddav import InformCardDAVBackend
+
         carddav_backend = InformCardDAVBackend(debug=args.debug_inform)
 
+    if args.ics_feed:
+        from py_webdav.ics_feed import ICSFeedHandler
 
+        ics_feed_handler = ICSFeedHandler(
+            sync_weeks=args.ics_feed_weeks,
+            debug=args.debug_inform,
+        )
 
     # Create handler with backends
     handler = Handler(
@@ -120,6 +142,7 @@ Endpoints:
         enable_principal_discovery=(args.caldav or args.carddav),
         caldav_backend=caldav_backend,
         carddav_backend=carddav_backend,
+        ics_feed_handler=ics_feed_handler,
         debug=args.debug,
     )
 
@@ -132,7 +155,19 @@ Endpoints:
             Route(
                 "/{path:path}",
                 webdav_handler,
-                methods=["GET", "HEAD", "PUT", "DELETE", "OPTIONS", "PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "REPORT"],
+                methods=[
+                    "GET",
+                    "HEAD",
+                    "PUT",
+                    "DELETE",
+                    "OPTIONS",
+                    "PROPFIND",
+                    "PROPPATCH",
+                    "MKCOL",
+                    "COPY",
+                    "MOVE",
+                    "REPORT",
+                ],
             ),
         ]
     )
@@ -148,6 +183,9 @@ Endpoints:
     if args.carddav:
         print(f"CardDAV enabled: http://{args.addr}:{args.port}/.well-known/carddav")
         print(f"  Contacts: {directory}/contacts/")
+    if args.ics_feed:
+        print(f"ICS Feed enabled: http://{args.addr}:{args.port}/feed.ics?calendar=OWNER_KEY")
+        print(f"  Sync range: {args.ics_feed_weeks} weeks before/after current date")
 
     uvicorn.run(
         app,
