@@ -660,11 +660,15 @@ async def test_ics_feed_timezone_handling():
 ## Questions for Review
 
 1. **Sync window**: Is 2 weeks (default) appropriate for ICS feed? Should it be configurable per-request?
+A: 2 weeks is OK for now.
 2. **Authentication**: Should we add authentication for ICS feed, or is query parameter sufficient?
+A: Not for now, but add it to the list for the future.
 3. **Caching**: Should we add HTTP caching headers (ETag, Last-Modified)?
+A: No, fetch the data from IN-FORM on each request for now. But add it to the list for the future.
 4. **Rate limiting**: Should we implement rate limiting per owner_key?
+A: No
 5. **Error handling**: What information should we expose in error messages?
-
+A: Nothing for now, just return an appropriate server error. Implement logging of ics and IN-FORM requests like in the existing client implementation. 
 ---
 
 ## Next Steps
