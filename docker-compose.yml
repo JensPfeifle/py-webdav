@@ -1,6 +1,6 @@
 services:
   webdav:
-    image: ghcr.io/jenspfeifle/pywebdav:claude-occurrence-per-event-gKo5U
+    image: ghcr.io/jenspfeifle/pywebdav:claude-add-ics-feed-endpoint-nGudI
     container_name: py-webdav-server
     command: ["sh", "-c", "python -m py_webdav.cmd.server --addr 0.0.0.0 --port 8080 --carddav --caldav --debug-inform /data"]
     ports:
