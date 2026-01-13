@@ -1,11 +1,7 @@
-app = 'py-webdav'
-primary_region = 'iad'
+app = 'in-ics'
+primary_region = 'fra'
 
 [build]
-
-[[mounts]]
-  source = 'data'
-  destination = '/data'
 
 [http_service]
   internal_port = 8080
