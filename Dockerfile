@@ -46,7 +46,6 @@ EXPOSE 8080
 # Set default environment variables
 ENV WEBDAV_HOST=0.0.0.0
 ENV WEBDAV_PORT=8080
-ENV WEBDAV_DIR=/data
 
 # Run the WebDAV server
-CMD ["sh", "-c", "python -m py_webdav.cmd.server --addr $WEBDAV_HOST --port $WEBDAV_PORT $WEBDAV_DIR"]
+CMD ["sh", "-c", "python -m py_webdav.cmd.server --addr $WEBDAV_HOST --port $WEBDAV_PORT --ics-feed"]
