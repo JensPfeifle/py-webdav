@@ -525,3 +525,73 @@ class InformAPIClient:
             "DELETE",
             f"/calendarEvents/{event_key}",
         )
+
+    async def get_calendar_event_occurrence(
+        self,
+        event_key: str,
+        occurrence_id: str,
+        fields: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Get data for a specific occurrence of a serial calendar event.
+
+        Args:
+            event_key: Calendar event identification key
+            occurrence_id: Occurrence identification
+            fields: List of fields to return
+
+        Returns:
+            Calendar event occurrence data
+        """
+        params: dict[str, Any] = {}
+        if fields:
+            params["fields"] = ",".join(fields)
+
+        response = await self._make_request(
+            "GET",
+            f"/calendarEvents/{event_key}/occurrences/{occurrence_id}",
+            params=params,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def update_calendar_event_occurrence(
+        self,
+        event_key: str,
+        occurrence_id: str,
+        event_data: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Update a specific occurrence of a serial calendar event.
+
+        Args:
+            event_key: Calendar event identification key
+            occurrence_id: Occurrence identification
+            event_data: Partial event data to update for this occurrence
+
+        Returns:
+            Updated occurrence data
+        """
+        response = await self._make_request(
+            "PATCH",
+            f"/calendarEvents/{event_key}/occurrences/{occurrence_id}",
+            json=event_data,
+        )
+
+        data: dict[str, Any] = response.json()
+        return data
+
+    async def delete_calendar_event_occurrence(
+        self,
+        event_key: str,
+        occurrence_id: str,
+    ) -> None:
+        """Delete a specific occurrence of a serial calendar event.
+
+        Args:
+            event_key: Calendar event identification key
+            occurrence_id: Occurrence identification
+        """
+        await self._make_request(
+            "DELETE",
+            f"/calendarEvents/{event_key}/occurrences/{occurrence_id}",
+        )

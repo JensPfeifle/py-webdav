@@ -301,6 +301,143 @@ class InformCalDAVBackend:
             # If parsing fails, fall back to series start date
             return series_start_dt
 
+    async def _update_occurrence(
+        self, event_key: str, occurrence_id: str, ical_data: str, path: str
+    ) -> CalendarObject:
+        """Update a specific occurrence of a series event.
+
+        Args:
+            event_key: Event key
+            occurrence_id: Occurrence ID
+            ical_data: iCalendar data with updated event
+            path: CalDAV object path
+
+        Returns:
+            Updated CalendarObject
+        """
+        # Convert iCalendar to INFORM format
+        try:
+            event_data = self._ical_to_inform_event(ical_data)
+        except Exception as e:
+            raise HTTPError(400, Exception(f"Invalid iCalendar data: {e}")) from e
+
+        # Update the occurrence via API
+        try:
+            await self.api_client.update_calendar_event_occurrence(
+                event_key, occurrence_id, event_data
+            )
+
+            # Fetch the updated occurrence
+            updated_occurrence = await self.api_client.get_calendar_event_occurrence(
+                event_key, occurrence_id, fields=["all"]
+            )
+
+            # Convert back to iCalendar
+            result_ical = self._inform_occurrence_to_ical(updated_occurrence)
+            etag = md5(result_ical.encode()).hexdigest()
+
+            return CalendarObject(
+                path=path,
+                data=result_ical,
+                mod_time=datetime.now(UTC),
+                content_length=len(result_ical.encode()),
+                etag=etag,
+            )
+
+        except Exception as e:
+            raise HTTPError(500, Exception(f"Failed to update occurrence: {e}")) from e
+
+    def _inform_occurrence_to_ical(self, event_data: dict[str, Any]) -> str:
+        """Convert INFORM event occurrence to iCalendar single event.
+
+        Each occurrence is treated as a separate single event (no RRULE).
+        Uses the occurrence's startDateTime and endDateTime fields directly.
+
+        Args:
+            event_data: Event occurrence data from INFORM API
+
+        Returns:
+            iCalendar data as string for a single event
+        """
+        cal = iCalendar()
+        cal.add("prodid", "-//INFORM CalDAV Backend//")
+        cal.add("version", "2.0")
+
+        event = iEvent()
+
+        # UID: For occurrences, use key-occurrenceId to make each unique
+        event_key = event_data.get("key", "")
+        occurrence_id = event_data.get("occurrenceId")
+        if occurrence_id:
+            uid = f"{event_key}-{occurrence_id}"
+        else:
+            uid = event_key
+        event.add("uid", uid)
+
+        # Summary (subject)
+        subject = event_data.get("subject", "")
+        if subject:
+            event.add("summary", subject)
+
+        # Description (content)
+        content = event_data.get("content", "")
+        if content:
+            event.add("description", content)
+
+        # Location
+        location = event_data.get("location", "")
+        if location:
+            event.add("location", location)
+
+        # Categories
+        category = event_data.get("eventCategory", "")
+        if category:
+            event.add("categories", [category])
+
+        # Start and End times
+        start_dt_str = event_data.get("startDateTime")
+        end_dt_str = event_data.get("endDateTime")
+        whole_day = event_data.get("wholeDayEvent", False)
+
+        if start_dt_str:
+            start_dt = datetime.fromisoformat(start_dt_str.replace("Z", "+00:00"))
+            if whole_day:
+                event.add("dtstart", start_dt.date())
+            else:
+                event.add("dtstart", start_dt)
+
+        if end_dt_str:
+            end_dt = datetime.fromisoformat(end_dt_str.replace("Z", "+00:00"))
+            if whole_day:
+                event.add("dtend", end_dt.date())
+            else:
+                event.add("dtend", end_dt)
+
+        # Reminder/alarm
+        reminder_enabled = event_data.get("reminderEnabled", False)
+        remind_before = event_data.get("remindBeforeStart", 0)
+        if reminder_enabled and remind_before > 0:
+            from icalendar import Alarm
+
+            alarm = Alarm()
+            alarm.add("action", "DISPLAY")
+            alarm.add("description", subject or "Reminder")
+            alarm.add("trigger", timedelta(seconds=-remind_before))
+            event.add_component(alarm)
+
+        # Privacy
+        is_private = event_data.get("private", False)
+        if is_private:
+            event.add("class", "PRIVATE")
+        else:
+            event.add("class", "PUBLIC")
+
+        # DTSTAMP (required)
+        event.add("dtstamp", datetime.now(UTC))
+
+        cal.add_component(event)
+        return cal.to_ical().decode("utf-8")
+
     def _inform_event_to_ical(self, event_data: dict[str, Any]) -> str:
         """Convert INFORM calendar event to iCalendar format.
 
@@ -800,17 +937,59 @@ class InformCalDAVBackend:
     async def get_calendar_object(
         self, request: Request, path: str, comp_request: CalendarCompRequest | None = None
     ) -> CalendarObject:
-        """Get a calendar object (event)."""
-        event_key = self._parse_object_path(path)
+        """Get a calendar object (event).
 
-        # Fetch event from INFORM API
-        try:
-            event_data = await self.api_client.get_calendar_event(event_key, fields=["all"])
-        except Exception as e:
-            raise HTTPError(404, Exception(f"Event not found: {event_key}")) from e
+        Handles both single events and occurrences of series events.
+        Path format: key.ics or key-occurrenceId.ics
+        """
+        path_str = self._parse_object_path(path)
 
-        # Convert to iCalendar
-        ical_data = self._inform_event_to_ical(event_data)
+        # Check if this is an occurrence (contains hyphen before .ics)
+        if "-" in path_str:
+            parts = path_str.rsplit("-", 1)
+            event_key = parts[0]
+            occurrence_id = parts[1] if len(parts) > 1 else None
+        else:
+            event_key = path_str
+            occurrence_id = None
+
+        if occurrence_id:
+            # Fetch the specific occurrence
+            # We need to query occurrences to get the occurrence data
+            # Use a date range that should include this occurrence
+            start_date = datetime.now(UTC) - timedelta(days=365)
+            end_date = datetime.now(UTC) + timedelta(days=365)
+
+            response = await self.api_client.get_calendar_events_occurrences(
+                owner_key=self.owner_key,
+                start_datetime=self._format_datetime_for_inform(start_date),
+                end_datetime=self._format_datetime_for_inform(end_date),
+                limit=1000,
+            )
+
+            events = response.get("calendarEvents", [])
+            event_data = None
+
+            # Find the specific occurrence
+            for evt in events:
+                if evt.get("key") == event_key and evt.get("occurrenceId") == occurrence_id:
+                    event_data = evt
+                    break
+
+            if not event_data:
+                raise HTTPError(404, Exception(f"Occurrence not found: {event_key}-{occurrence_id}"))
+
+            # Convert occurrence to iCalendar
+            ical_data = self._inform_occurrence_to_ical(event_data)
+        else:
+            # Fetch single event
+            try:
+                event_data = await self.api_client.get_calendar_event(event_key, fields=["all"])
+            except Exception as e:
+                raise HTTPError(404, Exception(f"Event not found: {event_key}")) from e
+
+            # Convert to iCalendar (treat as single occurrence)
+            ical_data = self._inform_occurrence_to_ical(event_data)
 
         # Generate ETag from content
         etag = md5(ical_data.encode()).hexdigest()
@@ -829,7 +1008,10 @@ class InformCalDAVBackend:
         calendar_path: str,
         comp_request: CalendarCompRequest | None = None,
     ) -> list[CalendarObject]:
-        """List all calendar objects in the calendar."""
+        """List all calendar objects in the calendar.
+
+        Each occurrence is returned as a separate CalDAV object.
+        """
         # Get sync date range
         start_date, end_date = self._get_sync_date_range()
 
@@ -844,39 +1026,27 @@ class InformCalDAVBackend:
         events = response.get("calendarEvents", [])
         objects = []
 
-        # Track unique event keys (avoid duplicates from occurrences)
-        seen_keys = set()
-
         for event_data in events:
             event_key = event_data.get("key", "")
-            if not event_key or event_key in seen_keys:
+            if not event_key:
                 continue
 
-            seen_keys.add(event_key)
-
-            # For occurrences of serial events, we need to fetch the full event
             occurrence_id = event_data.get("occurrenceId")
-            if occurrence_id:
-                # This is an occurrence of a serial event
-                # Fetch the full serial event definition with all fields
-                # (needed to get seriesSchema for RRULE generation)
-                try:
-                    full_event_data = await self.api_client.get_calendar_event(
-                        event_key, fields=["all"]
-                    )
-                    event_data = full_event_data
-                except Exception:
-                    continue
 
             try:
-                # Convert to iCalendar
-                ical_data = self._inform_event_to_ical(event_data)
+                # Convert occurrence to single event iCalendar
+                ical_data = self._inform_occurrence_to_ical(event_data)
 
                 # Generate ETag
                 etag = md5(ical_data.encode()).hexdigest()
 
-                # Create object path
-                object_path = f"{calendar_path}{event_key}.ics"
+                # Create unique object path
+                # For occurrences: key-occurrenceId.ics
+                # For single events: key.ics
+                if occurrence_id:
+                    object_path = f"{calendar_path}{event_key}-{occurrence_id}.ics"
+                else:
+                    object_path = f"{calendar_path}{event_key}.ics"
 
                 obj = CalendarObject(
                     path=object_path,
@@ -897,7 +1067,7 @@ class InformCalDAVBackend:
     ) -> list[CalendarObject]:
         """Query calendar objects with filters.
 
-        Note: Query filters are partially implemented.
+        Each occurrence is returned as a separate CalDAV object.
         """
         # For now, use the time range filter if available
         # TODO: Implement full filter support
@@ -926,32 +1096,23 @@ class InformCalDAVBackend:
         events = response.get("calendarEvents", [])
         objects = []
 
-        # Track unique event keys (avoid duplicates from occurrences)
-        seen_keys = set()
-
         for event_data in events:
             event_key = event_data.get("key", "")
-            if not event_key or event_key in seen_keys:
+            if not event_key:
                 continue
 
-            seen_keys.add(event_key)
-
-            # For occurrences, fetch full event with all fields
-            # (needed to get seriesSchema for RRULE generation)
             occurrence_id = event_data.get("occurrenceId")
-            if occurrence_id:
-                try:
-                    full_event_data = await self.api_client.get_calendar_event(
-                        event_key, fields=["all"]
-                    )
-                    event_data = full_event_data
-                except Exception:
-                    continue
 
             try:
-                ical_data = self._inform_event_to_ical(event_data)
+                # Convert occurrence to single event iCalendar
+                ical_data = self._inform_occurrence_to_ical(event_data)
                 etag = md5(ical_data.encode()).hexdigest()
-                object_path = f"{calendar_path}{event_key}.ics"
+
+                # Create unique object path
+                if occurrence_id:
+                    object_path = f"{calendar_path}{event_key}-{occurrence_id}.ics"
+                else:
+                    object_path = f"{calendar_path}{event_key}.ics"
 
                 obj = CalendarObject(
                     path=object_path,
@@ -974,9 +1135,45 @@ class InformCalDAVBackend:
         if_none_match: bool = False,
         if_match: str | None = None,
     ) -> CalendarObject:
-        """Create or update a calendar object."""
-        event_key = self._parse_object_path(path)
+        """Create or update a calendar object.
 
+        Supports both single events and individual occurrences.
+        """
+        path_str = self._parse_object_path(path)
+
+        # Check if this might be an occurrence path (contains hyphen)
+        # But verify it's actually an occurrence, not a UUID
+        is_occurrence = False
+        event_key = path_str
+        occurrence_id = None
+
+        if "-" in path_str:
+            parts = path_str.rsplit("-", 1)
+            potential_key = parts[0]
+            potential_occ_id = parts[1] if len(parts) > 1 else None
+
+            if potential_occ_id:
+                # Verify this is actually an occurrence by checking if it exists
+                try:
+                    await self.api_client.get_calendar_event_occurrence(
+                        potential_key, potential_occ_id, fields=["key"]
+                    )
+                    # If we get here, it's a valid occurrence
+                    is_occurrence = True
+                    event_key = potential_key
+                    occurrence_id = potential_occ_id
+                except Exception:
+                    # Not an occurrence, treat as new event with UUID filename
+                    is_occurrence = False
+                    event_key = path_str
+
+        if is_occurrence and occurrence_id:
+            # Update individual occurrence
+            return await self._update_occurrence(
+                event_key, occurrence_id, ical_data, path
+            )
+
+        # Handle single event (create or update)
         # Convert iCalendar to INFORM format
         try:
             event_data = self._ical_to_inform_event(ical_data)
@@ -1015,8 +1212,8 @@ class InformCalDAVBackend:
             # Fetch the created/updated event to get complete data
             final_event = await self.api_client.get_calendar_event(event_key, fields=["all"])
 
-            # Convert back to iCalendar
-            result_ical = self._inform_event_to_ical(final_event)
+            # Convert back to iCalendar (as single occurrence)
+            result_ical = self._inform_occurrence_to_ical(final_event)
             etag = md5(result_ical.encode()).hexdigest()
 
             # Update path to use INFORM key as UID (if event was newly created)
@@ -1036,9 +1233,49 @@ class InformCalDAVBackend:
             raise HTTPError(500, Exception(f"Failed to save event: {e}")) from e
 
     async def delete_calendar_object(self, request: Request, path: str) -> None:
-        """Delete a calendar object."""
-        event_key = self._parse_object_path(path)
+        """Delete a calendar object.
 
+        Supports both single events and individual occurrences.
+        """
+        path_str = self._parse_object_path(path)
+
+        # Check if this might be an occurrence path (contains hyphen)
+        # But verify it's actually an occurrence, not a UUID
+        is_occurrence = False
+        event_key = path_str
+        occurrence_id = None
+
+        if "-" in path_str:
+            parts = path_str.rsplit("-", 1)
+            potential_key = parts[0]
+            potential_occ_id = parts[1] if len(parts) > 1 else None
+
+            if potential_occ_id:
+                # Verify this is actually an occurrence by trying to get it
+                try:
+                    await self.api_client.get_calendar_event_occurrence(
+                        potential_key, potential_occ_id, fields=["key"]
+                    )
+                    # If we get here, it's a valid occurrence
+                    is_occurrence = True
+                    event_key = potential_key
+                    occurrence_id = potential_occ_id
+                except Exception:
+                    # Not an occurrence, treat as single event
+                    is_occurrence = False
+                    event_key = path_str
+
+        if is_occurrence and occurrence_id:
+            # Delete individual occurrence
+            try:
+                await self.api_client.delete_calendar_event_occurrence(event_key, occurrence_id)
+            except Exception as e:
+                raise HTTPError(
+                    404, Exception(f"Occurrence not found: {event_key}-{occurrence_id}")
+                ) from e
+            return
+
+        # Delete single event
         try:
             await self.api_client.delete_calendar_event(event_key)
         except Exception as e:
