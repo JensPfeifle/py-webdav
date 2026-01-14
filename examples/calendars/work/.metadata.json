@@ -1,6 +1,0 @@
-{
-  "name": "Work Calendar",
-  "description": "Work events and meetings",
-  "max_resource_size": 0,
-  "supported_component_set": ["VEVENT", "VTODO"]
-}

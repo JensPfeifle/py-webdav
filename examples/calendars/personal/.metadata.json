@@ -1,6 +1,0 @@
-{
-  "name": "Personal Calendar",
-  "description": "Personal events and reminders",
-  "max_resource_size": 0,
-  "supported_component_set": ["VEVENT", "VTODO"]
-}
