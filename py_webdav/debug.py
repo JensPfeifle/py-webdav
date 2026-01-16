@@ -98,11 +98,11 @@ def log_request(method: str, path: str, headers: dict[str, str], body: bytes | N
                 if line.strip():
                     logger.info(f"  {line}")
         else:
-            # Log non-XML bodies with size info
-            body_preview = body[:200].decode("utf-8", errors="replace")
-            logger.info(f"  [{len(body)} bytes] {body_preview}")
-            if len(body) > 200:
-                logger.info(f"  ... ({len(body) - 200} more bytes)")
+            # Log full body for non-XML content
+            body_text = body.decode("utf-8", errors="replace")
+            logger.info(f"  [{len(body)} bytes]")
+            for line in body_text.split("\n"):
+                logger.info(f"  {line}")
 
     logger.info("=" * 80)
 
@@ -140,11 +140,11 @@ def log_response(status_code: int, headers: dict[str, Any], body: bytes | None) 
                 if line.strip():
                     logger.info(f"  {line}")
         else:
-            # Log non-XML bodies with size info
-            body_preview = body[:200].decode("utf-8", errors="replace")
-            logger.info(f"  [{len(body)} bytes] {body_preview}")
-            if len(body) > 200:
-                logger.info(f"  ... ({len(body) - 200} more bytes)")
+            # Log full body for non-XML content
+            body_text = body.decode("utf-8", errors="replace")
+            logger.info(f"  [{len(body)} bytes]")
+            for line in body_text.split("\n"):
+                logger.info(f"  {line}")
 
     logger.info("=" * 80)
     logger.info("")  # Empty line for readability
