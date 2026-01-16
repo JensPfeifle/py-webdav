@@ -56,10 +56,9 @@ class ICSFeedHandler:
         Process:
         1. Extract calendar parameter (OWNER_KEY) from query string
         2. Fetch events from INFORM API for configured date range
-        3. Deduplicate recurring event occurrences (same as CalDAV)
-        4. Convert each event to iCalendar format
-        5. Combine into single VCALENDAR with multiple VEVENTs
-        6. Return as text/calendar response with inline content disposition
+        3. Convert each occurrence to iCalendar format (as individual VEVENTs)
+        4. Combine into single VCALENDAR with multiple VEVENTs
+        5. Return as text/calendar response with inline content disposition
 
         Args:
             request: HTTP request containing calendar query parameter
@@ -106,35 +105,9 @@ class ICSFeedHandler:
             if self.debug:
                 print(f"[ICS Feed] Received {len(events)} event occurrences")
 
-            # Deduplicate recurring events
-            # The occurrences endpoint returns multiple records for series events,
-            # but we want one event with RRULE (same as CalDAV)
-            seen_keys: set[str] = set()
-            unique_events: list[dict[str, Any]] = []
-
-            for event_data in events:
-                event_key = event_data.get("key", "")
-                if event_key in seen_keys:
-                    continue
-
-                seen_keys.add(event_key)
-
-                # Fetch full event if this is an occurrence record
-                # Quirk: occurrences endpoint doesn't include seriesSchema
-                if event_data.get("occurrenceId"):
-                    if self.debug:
-                        print(f"[ICS Feed] Fetching full event for key: {event_key}")
-
-                    full_event = await self.api_client.get_calendar_event(event_key, fields=["all"])
-                    event_data = full_event
-
-                unique_events.append(event_data)
-
-            if self.debug:
-                print(f"[ICS Feed] Deduplicated to {len(unique_events)} unique events")
-
             # Generate combined iCalendar feed
-            ical_content = self._generate_combined_ical(unique_events, owner_key)
+            # Pass all occurrences directly as individual events
+            ical_content = self._generate_combined_ical(events, owner_key)
 
             if self.debug:
                 print(f"[ICS Feed] Generated {len(ical_content)} bytes of iCalendar data")

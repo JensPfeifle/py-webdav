@@ -290,7 +290,7 @@ class InformCalendarConverter:
             # If parsing fails, fall back to series start date
             return series_start_dt
 
-    def inform_event_to_ical(self, event_data: dict[str, Any]) -> str:
+    def inform_event_to_ical(self, event_data: dict[str, Any], include_debug_info: bool = False) -> str:
         """Convert INFORM calendar event to iCalendar format.
 
         Handles both single and recurring (serial) events. For recurring events,
@@ -305,6 +305,7 @@ class InformCalendarConverter:
                 - location: Event location
                 - eventCategory: Event category
                 - eventMode: "single" or "serial" (recurring)
+                - occurrenceId: If present, treat as single event occurrence
                 - startDateTime/endDateTime: For single events
                 - seriesStartDate/seriesEndDate: For recurring events
                 - seriesSchema: Recurrence pattern definition
@@ -312,6 +313,7 @@ class InformCalendarConverter:
                 - wholeDayEvent: Boolean flag for all-day events
                 - private: Privacy flag
                 - reminderEnabled/remindBeforeStart: Alarm settings
+            include_debug_info: If True, append debug information to description
 
         Returns:
             Complete iCalendar string (BEGIN:VCALENDAR...END:VCALENDAR)
@@ -358,9 +360,11 @@ class InformCalendarConverter:
             event.add("categories", [category])
 
         # Event mode determines if single or recurring
+        # If event has occurrenceId, treat it as a single event with its occurrence times
         event_mode = event_data.get("eventMode", "single")
+        is_occurrence = bool(event_data.get("occurrenceId"))
 
-        if event_mode == "single":
+        if event_mode == "single" or is_occurrence:
             # Single event
             start_dt_str = event_data.get("startDateTime")
             end_dt_str = event_data.get("endDateTime")
@@ -457,39 +461,44 @@ class InformCalendarConverter:
         else:
             event.add("class", "PUBLIC")
 
-        # Add description with debug information
-        event_key = event_data.get("key", "")
-        event_mode = event_data.get("eventMode", "single")
-        series_schema = event_data.get("seriesSchema", {})
+        # Add description with optional debug information
+        if include_debug_info:
+            event_key = event_data.get("key", "")
+            event_mode = event_data.get("eventMode", "single")
+            series_schema = event_data.get("seriesSchema", {})
 
-        debug_lines = []
-        debug_lines.append(f"[DEBUG] Event ID: {event_key}")
-        debug_lines.append(f"[DEBUG] Event Mode: {event_mode}")
+            debug_lines = []
+            debug_lines.append(f"[DEBUG] Event ID: {event_key}")
+            debug_lines.append(f"[DEBUG] Event Mode: {event_mode}")
 
-        if event_mode == "serial" and series_schema:
-            import json
+            if event_mode == "serial" and series_schema:
+                import json
 
-            debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
-            debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
-            debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
+                debug_lines.append(f"[DEBUG] Series Schema: {json.dumps(series_schema)}")
+                debug_lines.append(f"[DEBUG] Series Start: {event_data.get('seriesStartDate', 'N/A')}")
+                debug_lines.append(f"[DEBUG] Series End: {event_data.get('seriesEndDate', 'N/A')}")
 
-            # Add the generated RRULE string (convert vRecur object to string if present)
-            if "rrule" in event:
-                rrule_value = event.get("rrule")
-                # Convert vRecur to clean string format
-                if hasattr(rrule_value, "to_ical"):
-                    rrule_str_debug = rrule_value.to_ical().decode("utf-8")
-                else:
-                    rrule_str_debug = str(rrule_value)
-                debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_str_debug}")
+                # Add the generated RRULE string (convert vRecur object to string if present)
+                if "rrule" in event:
+                    rrule_value = event.get("rrule")
+                    # Convert vRecur to clean string format
+                    if hasattr(rrule_value, "to_ical"):
+                        rrule_str_debug = rrule_value.to_ical().decode("utf-8")
+                    else:
+                        rrule_str_debug = str(rrule_value)
+                    debug_lines.append(f"[DEBUG] Generated RRULE: {rrule_str_debug}")
 
-        # Combine original content with debug info
-        if content:
-            full_description = content + "\n\n" + "\n".join(debug_lines)
+            # Combine original content with debug info
+            if content:
+                full_description = content + "\n\n" + "\n".join(debug_lines)
+            else:
+                full_description = "\n".join(debug_lines)
+
+            event.add("description", full_description)
         else:
-            full_description = "\n".join(debug_lines)
-
-        event.add("description", full_description)
+            # Just add the content without debug info
+            if content:
+                event.add("description", content)
 
         # Last modified (use current time)
         event.add("dtstamp", datetime.now(UTC))
