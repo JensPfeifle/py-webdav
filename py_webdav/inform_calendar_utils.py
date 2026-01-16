@@ -337,8 +337,14 @@ class InformCalendarConverter:
         event = iEvent()
 
         # Required: UID
+        # For occurrences, append occurrenceId to make UID unique
         event_key = event_data.get("key", "")
-        event.add("uid", event_key)
+        occurrence_id = event_data.get("occurrenceId")
+        if occurrence_id:
+            uid = f"{event_key}-{occurrence_id}"
+        else:
+            uid = event_key
+        event.add("uid", uid)
 
         # Summary (subject)
         subject = event_data.get("subject", "")
