@@ -98,6 +98,7 @@ class ICSFeedHandler:
                 start_datetime=start_str,
                 end_datetime=end_str,
                 limit=1000,
+                fields=["all"],  # Request all fields including content, location, etc.
             )
 
             events = events_response.get("calendarEvents", [])
